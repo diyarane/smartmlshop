@@ -247,6 +247,28 @@ class Predictor:
             'scenarios': scenarios
         }
 
+
+def get_employee_performance(df):
+    """Standalone wrapper used by export and reporting."""
+    if 'employee_id' not in df.columns:
+        return []
+    grouped = df.groupby('employee_id').agg(
+        total_sales=('revenue', 'sum'),
+        total_transactions=('revenue', 'count'),
+        total_profit=('profit', 'sum')
+    ).reset_index()
+    grouped['avg_transaction'] = grouped['total_sales'] / grouped['total_transactions'].clip(lower=1)
+    mx = grouped['total_sales'].max()
+    grouped['performance_rating'] = (grouped['total_sales'] / mx * 10).round(1) if mx and mx > 0 else 0.0
+    return grouped.to_dict('records')
+
+
+def predict_demand(input_data):
+    """Standalone wrapper used by export and reporting."""
+    p = Predictor()
+    return p.predict_demand(input_data)
+
+
 if __name__ == "__main__":
     # Test prediction
     predictor = Predictor()

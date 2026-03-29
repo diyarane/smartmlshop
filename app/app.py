@@ -15,6 +15,8 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # Now import from parent directory
+from pathlib import Path
+
 from config import Config
 
 # Import blueprints - using direct imports since we're in the app directory
@@ -71,7 +73,16 @@ def create_app():
     
     # Ensure directories exist
     Config.ensure_directories()
-    
+
+    if not (
+        Path(Config.SALES_MODEL_PATH).exists()
+        and Path(Config.DEMAND_MODEL_PATH).exists()
+        and Path(Config.PROFIT_MODEL_PATH).exists()
+    ):
+        logger.warning(
+            "Models not found. Run: python -m scripts.train to train them."
+        )
+
     return app
 
 if __name__ == '__main__':

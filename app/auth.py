@@ -17,53 +17,52 @@ auth_bp = Blueprint('auth', __name__)
 USERS_FILE = os.path.join(parent_dir, 'users.json')
 
 def init_users():
-    """Initialize users database"""
-    if not os.path.exists(USERS_FILE):
-        users = {
-            'manager': {
-                'password': hashlib.sha256('manager123'.encode()).hexdigest(),
-                'role': 'manager',
-                'name': 'Store Manager'
-            },
-            'alice': {
-                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
-                'role': 'employee',
-                'name': 'Alice Johnson',
-                'employee_id': 1
-            },
-            'bob': {
-                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
-                'role': 'employee',
-                'name': 'Bob Smith',
-                'employee_id': 2
-            },
-            'carol': {
-                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
-                'role': 'employee',
-                'name': 'Carol Davis',
-                'employee_id': 3
-            },
-            'david': {
-                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
-                'role': 'employee',
-                'name': 'David Wilson',
-                'employee_id': 4
-            },
-            'emma': {
-                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
-                'role': 'employee',
-                'name': 'Emma Brown',
-                'employee_id': 5
-            }
+    """Always write the canonical user list so it stays in sync with the DB."""
+    users = {
+        'manager': {
+            'password': hashlib.sha256('manager123'.encode()).hexdigest(),
+            'role': 'manager',
+            'name': 'John Manager'
+        },
+        'alice': {
+            'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+            'role': 'employee',
+            'name': 'Alice Johnson',
+            'employee_id': 1
+        },
+        'bob': {
+            'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+            'role': 'employee',
+            'name': 'Bob Smith',
+            'employee_id': 2
+        },
+        'carol': {
+            'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+            'role': 'employee',
+            'name': 'Carol Davis',
+            'employee_id': 3
+        },
+        'david': {
+            'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+            'role': 'employee',
+            'name': 'David Wilson',
+            'employee_id': 4
+        },
+        'emma': {
+            'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+            'role': 'employee',
+            'name': 'Emma Brown',
+            'employee_id': 5
         }
-        with open(USERS_FILE, 'w') as f:
-            json.dump(users, f)
+    }
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=2)
 
 def get_user(username):
     """Get user from database"""
     if not os.path.exists(USERS_FILE):
         init_users()
-    
+
     with open(USERS_FILE, 'r') as f:
         users = json.load(f)
     return users.get(username)
@@ -76,11 +75,11 @@ def login_required(role=None):
             if 'user' not in session:
                 flash('Please login first', 'warning')
                 return redirect(url_for('auth.login'))
-            
+
             if role and session['user']['role'] != role:
                 flash('Access denied. Insufficient permissions.', 'danger')
                 return redirect(url_for('auth.dashboard_redirect'))
-            
+
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -91,21 +90,21 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
+
         user = get_user(username)
-        
+
         if user and user['password'] == hashlib.sha256(password.encode()).hexdigest():
             session['user'] = {
                 'username': username,
                 'role': user['role'],
                 'name': user['name']
             }
-            
+
             if user.get('employee_id'):
                 session['user']['employee_id'] = user['employee_id']
-            
+
             flash(f'Welcome back, {user["name"]}!', 'success')
-            
+
             # Redirect based on role
             if user['role'] == 'manager':
                 return redirect(url_for('routes.manager_dashboard'))
@@ -113,7 +112,7 @@ def login():
                 return redirect(url_for('routes.employee_dashboard'))
         else:
             flash('Invalid username or password', 'danger')
-    
+
     return render_template('login.html')
 
 @auth_bp.route('/logout')
@@ -128,7 +127,7 @@ def dashboard_redirect():
     """Redirect to appropriate dashboard"""
     if 'user' not in session:
         return redirect(url_for('auth.login'))
-    
+
     if session['user']['role'] == 'manager':
         return redirect(url_for('routes.manager_dashboard'))
     else:

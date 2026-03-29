@@ -16,9 +16,6 @@
   .section-header{padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
   .section-header h5{margin:0;font-weight:700;color:#1e293b;font-size:15px}
   .section-body{padding:20px 22px}
-  .forecast-tabs{display:flex;gap:8px;flex-wrap:wrap}
-  .ftab{padding:7px 16px;border-radius:8px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:13px;font-weight:600;color:#64748b;transition:all .2s}
-  .ftab.active{background:var(--primary);color:white;border-color:var(--primary)}
   .forecast-result{background:#f8fafc;border-radius:12px;padding:18px}
   .forecast-num{font-size:28px;font-weight:800;color:#1e293b}
   .forecast-sub{font-size:13px;color:#64748b;margin-top:2px}
@@ -42,6 +39,7 @@
   .suggestion-text{font-size:13px;color:#475569}
   .leader-item{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid #f1f5f9}
   .leader-item:last-child{border-bottom:none}
+  .leader-self{background:#eef2ff;border-radius:12px;padding:14px 12px;margin:4px 0;border-bottom:none}
   .leader-rank{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
   .rank-1{background:#fef3c7;color:#92400e}.rank-2{background:#f1f5f9;color:#475569}.rank-3{background:#fde8d8;color:#9a3412}.rank-n{background:#f1f5f9;color:#64748b}
   .leader-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#7c3aed);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;flex-shrink:0}
@@ -53,11 +51,14 @@
   .cat-btn{padding:6px 14px;border-radius:8px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:13px;color:#64748b;transition:all .2s}
   .cat-btn.active{background:var(--primary);color:white;border-color:var(--primary)}
   .days-sel{padding:6px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#374151;background:white}
+  .margin-badge{font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid px-2">
+
+  <div id="kpiLoadError" class="alert alert-danger d-none" role="alert"></div>
 
   <!-- Header -->
   <div class="page-header">
@@ -77,7 +78,7 @@
         <div class="d-flex justify-content-between align-items-start">
           <div>
             <div class="stat-label">Total Sales</div>
-            <div class="stat-value">{% if metrics %}${{ "%.0f"|format(metrics.total_sales) }}{% else %}<span class="spin"></span>{% endif %}</div>
+            <div class="stat-value" id="kpiSales"><span class="spin"></span></div>
           </div>
           <div class="stat-icon blue"><i class="fas fa-dollar-sign"></i></div>
         </div>
@@ -88,7 +89,7 @@
         <div class="d-flex justify-content-between align-items-start">
           <div>
             <div class="stat-label">Transactions</div>
-            <div class="stat-value">{% if metrics %}{{ metrics.total_transactions }}{% else %}<span class="spin"></span>{% endif %}</div>
+            <div class="stat-value" id="kpiTxns"><span class="spin"></span></div>
           </div>
           <div class="stat-icon green"><i class="fas fa-receipt"></i></div>
         </div>
@@ -99,7 +100,7 @@
         <div class="d-flex justify-content-between align-items-start">
           <div>
             <div class="stat-label">Avg Transaction</div>
-            <div class="stat-value">{% if metrics %}${{ "%.0f"|format(metrics.avg_transaction) }}{% else %}<span class="spin"></span>{% endif %}</div>
+            <div class="stat-value" id="kpiAvg"><span class="spin"></span></div>
           </div>
           <div class="stat-icon amber"><i class="fas fa-chart-bar"></i></div>
         </div>
@@ -110,7 +111,7 @@
         <div class="d-flex justify-content-between align-items-start">
           <div>
             <div class="stat-label">Total Profit</div>
-            <div class="stat-value">{% if metrics %}${{ "%.0f"|format(metrics.total_profit) }}{% else %}<span class="spin"></span>{% endif %}</div>
+            <div class="stat-value" id="kpiProfit"><span class="spin"></span></div>
           </div>
           <div class="stat-icon purple"><i class="fas fa-coins"></i></div>
         </div>
@@ -118,65 +119,129 @@
     </div>
   </div>
 
-  <!-- Forecast Section -->
+  <!-- Section 1: Demand forecast (area, blue/indigo) -->
   <div class="section-card">
     <div class="section-header">
-      <h5><i class="fas fa-chart-line text-primary me-2"></i>Demand, Sales &amp; Revenue Forecast</h5>
-      <div class="d-flex gap-2 flex-wrap">
-        <select class="days-sel" id="forecastDays" onchange="runForecast()">
+      <h5><i class="fas fa-chart-area me-2" style="color:#4338ca"></i>Demand Forecast</h5>
+      <select class="days-sel forecast-window-sel" aria-label="Forecast window for demand">
+        <option value="7">Next 7 days</option>
+        <option value="14">Next 14 days</option>
+        <option value="30" selected>Next 30 days</option>
+        <option value="60">Next 60 days</option>
+      </select>
+    </div>
+    <div class="section-body">
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="demandTotal"><span class="spin"></span></div>
+            <div class="forecast-sub" id="demandTotalLbl">Total forecasted units</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="demandDaily"><span class="spin"></span></div>
+            <div class="forecast-sub">Daily average (units)</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="demandTrend"><span class="spin"></span></div>
+            <div class="forecast-sub">Trend vs previous period</div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="demandAreaChart"></canvas></div>
+      <div id="demandForecastErr" class="alert alert-warning d-none mt-2 mb-0 small"></div>
+    </div>
+  </div>
+
+  <!-- Section 2: Revenue forecast (bar, green) -->
+  <div class="section-card">
+    <div class="section-header">
+      <h5><i class="fas fa-chart-bar me-2" style="color:#059669"></i>Revenue Forecast</h5>
+      <select class="days-sel forecast-window-sel" aria-label="Forecast window for revenue">
+        <option value="7">Next 7 days</option>
+        <option value="14">Next 14 days</option>
+        <option value="30" selected>Next 30 days</option>
+        <option value="60">Next 60 days</option>
+      </select>
+    </div>
+    <div class="section-body">
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="revTotal"><span class="spin"></span></div>
+            <div class="forecast-sub" id="revTotalLbl">Total forecasted revenue</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="revDaily"><span class="spin"></span></div>
+            <div class="forecast-sub">Daily average</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="revPeak"><span class="spin"></span></div>
+            <div class="forecast-sub">Peak day</div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="revenueBarChart"></canvas></div>
+      <div id="revForecastErr" class="alert alert-warning d-none mt-2 mb-0 small"></div>
+    </div>
+  </div>
+
+  <!-- Section 3: Profit vs cost (dual line) -->
+  <div class="section-card">
+    <div class="section-header">
+      <h5><i class="fas fa-chart-line me-2" style="color:#ea580c"></i>Profit Forecast</h5>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="margin-badge" id="profitMarginBadge">Margin —</span>
+        <select class="days-sel forecast-window-sel" aria-label="Forecast window for profit">
           <option value="7">Next 7 days</option>
           <option value="14">Next 14 days</option>
           <option value="30" selected>Next 30 days</option>
           <option value="60">Next 60 days</option>
         </select>
-        <select class="days-sel" id="forecastCategory" onchange="runForecast()">
-          <option value="0">Electronics</option>
-          <option value="1">Clothing</option>
-          <option value="2">Groceries</option>
-          <option value="3">Home</option>
-          <option value="4">Sports</option>
-        </select>
       </div>
     </div>
     <div class="section-body">
-      <div class="forecast-tabs mb-3">
-        <button class="ftab active" onclick="switchForecastTab('demand',this)">📦 Demand Forecast</button>
-        <button class="ftab" onclick="switchForecastTab('sales',this)">💰 Sales Forecast</button>
-        <button class="ftab" onclick="switchForecastTab('revenue',this)">📈 Revenue Forecast</button>
-      </div>
       <div class="row g-3 mb-3">
         <div class="col-md-4">
           <div class="forecast-result text-center">
-            <div class="forecast-num" id="fTotal"><span class="spin"></span></div>
-            <div class="forecast-sub" id="fTotalLabel">Total Demand</div>
+            <div class="forecast-num" id="profitTotal"><span class="spin"></span></div>
+            <div class="forecast-sub" id="profitTotalLbl">Total profit</div>
           </div>
         </div>
         <div class="col-md-4">
           <div class="forecast-result text-center">
-            <div class="forecast-num" id="fDaily"><span class="spin"></span></div>
-            <div class="forecast-sub" id="fDailyLabel">Daily Average</div>
+            <div class="forecast-num" id="profitDaily"><span class="spin"></span></div>
+            <div class="forecast-sub">Avg daily profit</div>
           </div>
         </div>
         <div class="col-md-4">
           <div class="forecast-result text-center">
-            <div class="forecast-num" id="fTrend"><span class="spin"></span></div>
-            <div class="forecast-sub">Trend vs Last Period</div>
+            <div class="forecast-num" id="profitTrend"><span class="spin"></span></div>
+            <div class="forecast-sub">Trend vs previous period</div>
           </div>
         </div>
       </div>
-      <div class="chart-wrap"><canvas id="forecastChart"></canvas></div>
+      <div class="chart-wrap"><canvas id="profitDualChart"></canvas></div>
+      <div id="profitForecastErr" class="alert alert-warning d-none mt-2 mb-0 small"></div>
     </div>
   </div>
 
-  <!-- Inventory Management -->
+  <!-- Section 4: Inventory table -->
   <div class="section-card">
     <div class="section-header">
-      <h5><i class="fas fa-boxes text-success me-2"></i>Inventory Management &amp; Stock Levels</h5>
-      <div class="forecast-tabs">
-        <button class="cat-btn active" onclick="filterInventory('all',this)">All</button>
-        <button class="cat-btn" onclick="filterInventory('critical',this)">🔴 Critical</button>
-        <button class="cat-btn" onclick="filterInventory('low',this)">🟡 Low</button>
-        <button class="cat-btn" onclick="filterInventory('ok',this)">🟢 OK</button>
+      <h5><i class="fas fa-boxes text-success me-2"></i>Inventory Management</h5>
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="cat-btn active" onclick="filterInventory('all',this)">All</button>
+        <button type="button" class="cat-btn" onclick="filterInventory('critical',this)">🔴 Critical</button>
+        <button type="button" class="cat-btn" onclick="filterInventory('low',this)">🟡 Low</button>
+        <button type="button" class="cat-btn" onclick="filterInventory('ok',this)">🟢 OK</button>
       </div>
     </div>
     <div class="section-body p-0">
@@ -184,8 +249,8 @@
         <table class="inv-table">
           <thead>
             <tr>
-              <th>Product</th><th>Category</th><th>Stock Level</th>
-              <th>Reorder Point</th><th>30d Forecast Demand</th><th>Status</th><th>Action</th>
+              <th>Product</th><th>Category</th><th>Stock</th>
+              <th>Reorder Point</th><th>30d Demand Forecast</th><th>Status</th><th>Action</th>
             </tr>
           </thead>
           <tbody id="inventoryBody">
@@ -193,10 +258,11 @@
           </tbody>
         </table>
       </div>
+      <div id="inventoryErr" class="alert alert-danger d-none m-3 small"></div>
     </div>
   </div>
 
-  <!-- AI Suggestions -->
+  <!-- Section 5: AI suggestions -->
   <div class="section-card">
     <div class="section-header">
       <h5><i class="fas fa-lightbulb text-warning me-2"></i>AI Inventory Suggestions</h5>
@@ -226,239 +292,482 @@
   <div class="section-card">
     <div class="section-header"><h5><i class="fas fa-medal text-warning me-2"></i>Employee Leaderboard – Top 5</h5></div>
     <div class="section-body" id="leaderboard"><div class="text-center py-3"><span class="spin"></span></div></div>
+    <div id="leaderboardErr" class="alert alert-danger d-none mx-3 mb-3 small"></div>
   </div>
 
 </div>
+{% endblock %}
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% block extra_js %}
 <script>
-const empId = {{ session['user']['employee_id'] if 'employee_id' in session['user'] else 1 }};
-let forecastChart, mySalesChart, myProductsChart;
-let currentForecastType = 'demand';
-let allInventory = [];
+const empId = {{ employee_id | tojson }};
 const CATS = ['Electronics','Clothing','Groceries','Home','Sports'];
 const CAT_COLORS = ['#4f46e5','#10b981','#f59e0b','#3b82f6','#ef4444'];
 
+let demandChart, revenueChart, profitChart, mySalesChart, myProductsChart;
+let allInventory = [];
+let lastForecastPayload = null;
+
+function getForecastDays() {
+  const sel = document.querySelector('.forecast-window-sel');
+  return sel ? parseInt(sel.value, 10) || 30 : 30;
+}
+
+function syncForecastSelectors(val) {
+  document.querySelectorAll('.forecast-window-sel').forEach(s => { s.value = String(val); });
+}
+
+document.querySelectorAll('.forecast-window-sel').forEach(sel => {
+  sel.addEventListener('change', () => {
+    syncForecastSelectors(sel.value);
+    loadForecastAll();
+  });
+});
+
+function shortLabels(dates) {
+  return (dates || []).map(d => {
+    const x = new Date(d + 'T12:00:00');
+    return x.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+}
+
+function halfTrendPct(values) {
+  if (!values || values.length < 4) return { pct: '0.0', up: true };
+  const half = Math.floor(values.length / 2);
+  const f1 = values.slice(0, half).reduce((a, b) => a + b, 0) / half;
+  const f2 = values.slice(half).reduce((a, b) => a + b, 0) / (values.length - half);
+  if (!f1) return { pct: '0.0', up: true };
+  const pct = ((f2 - f1) / f1 * 100).toFixed(1);
+  return { pct, up: parseFloat(pct, 10) >= 0 };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('inventoryBody').addEventListener('click', (e) => {
+    const b = e.target.closest('.reorder-btn');
+    if (!b) return;
+    showOrderModal(
+      b.getAttribute('data-name') || '',
+      parseInt(b.getAttribute('data-suggested') || '0', 10),
+      parseInt(b.getAttribute('data-stock') || '0', 10),
+      parseInt(b.getAttribute('data-reorder') || '0', 10)
+    );
+  });
   loadMyMetrics();
-  runForecast();
+  loadForecastAll();
   loadInventory();
   loadLeaderboard();
 });
 
-// My metrics
 async function loadMyMetrics() {
-  try {
-    const r = await fetch(`/api/employee/${empId}/metrics`);
-    const d = await r.json();
-    if (!d.error) { createMySalesChart(d.daily_sales||{}); createMyProductsChart(d.top_products||{}); return; }
-  } catch(e) {}
-  createMySalesChart(demoDailySales());
-  createMyProductsChart({'MacBook Pro':3200,'iPhone 15':2000,'AirPods Pro':750,'iPad Air':1200,'Apple Watch':800});
-}
-
-// Forecast
-function switchForecastTab(type, btn) {
-  currentForecastType = type;
-  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  runForecast();
-}
-
-function runForecast() {
-  const days = parseInt(document.getElementById('forecastDays').value);
-  const category = parseInt(document.getElementById('forecastCategory').value);
-  ['fTotal','fDaily','fTrend'].forEach(id => { document.getElementById(id).innerHTML='<span class="spin"></span>'; });
-  const data = buildForecast(category, days, currentForecastType);
-  renderForecast(data, days, currentForecastType);
-}
-
-function buildForecast(cat, days, type) {
-  const bases = { demand:[12,25,80,15,20], sales:[1500,600,400,350,300], revenue:[1800,720,480,420,360] };
-  const base = bases[type][cat];
-  const labels = [], values = [];
-  const today = new Date();
-  for (let i = 1; i <= days; i++) {
-    const d = new Date(today); d.setDate(today.getDate()+i);
-    labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
-    const isWknd = d.getDay()===0||d.getDay()===6;
-    const seasonal = [.85,.85,.9,1,1,1,1,1,1.1,1.2,1.3,1.5][d.getMonth()];
-    values.push(Math.max(1, base*(isWknd?1.4:.85)*(1+(i/days)*0.1)*(0.85+Math.random()*.3)*seasonal));
+  const errEl = document.getElementById('kpiLoadError');
+  errEl.classList.add('d-none');
+  if (empId === null || empId === undefined) {
+    errEl.textContent = 'No employee ID in session; cannot load metrics.';
+    errEl.classList.remove('d-none');
+    ['kpiSales','kpiTxns','kpiAvg','kpiProfit'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '—';
+    });
+    return;
   }
-  return {labels,values};
+  try {
+    const r = await fetch(`/api/employee/${empId}/metrics`, { credentials: 'same-origin' });
+    const d = await r.json();
+    if (!r.ok || d.error) {
+      errEl.textContent = d.error || 'Could not load your performance metrics.';
+      errEl.classList.remove('d-none');
+      ['kpiSales','kpiTxns','kpiAvg','kpiProfit'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '—';
+      });
+      createMySalesChart({});
+      createMyProductsChart({});
+      return;
+    }
+    document.getElementById('kpiSales').textContent = '$' + Math.round(d.total_sales || 0).toLocaleString();
+    document.getElementById('kpiTxns').textContent = String(d.total_transactions ?? 0);
+    document.getElementById('kpiAvg').textContent = '$' + Math.round(d.avg_transaction || 0).toLocaleString();
+    document.getElementById('kpiProfit').textContent = '$' + Math.round(d.total_profit || 0).toLocaleString();
+    createMySalesChart(d.daily_sales || {});
+    createMyProductsChart(d.top_products || {});
+  } catch (e) {
+    errEl.textContent = 'Could not load your performance metrics. Please refresh or try again later.';
+    errEl.classList.remove('d-none');
+    ['kpiSales','kpiTxns','kpiAvg','kpiProfit'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '—';
+    });
+    createMySalesChart({});
+    createMyProductsChart({});
+  }
 }
 
-function renderForecast(data, days, type) {
-  const total = data.values.reduce((a,b)=>a+b,0);
-  const daily = total/days;
-  const half = Math.floor(data.values.length/2);
-  const f1 = data.values.slice(0,half).reduce((a,b)=>a+b,0)/half;
-  const f2 = data.values.slice(half).reduce((a,b)=>a+b,0)/(data.values.length-half);
-  const trendPct = ((f2-f1)/f1*100).toFixed(1);
-  const trendUp = trendPct>=0;
-  const fmt = type==='demand' ? v=>Math.round(v).toLocaleString()+' units' : v=>'$'+v.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',');
-  const typeLabels = {demand:['Total Demand','Avg/Day'],sales:['Total Sales','Avg/Day'],revenue:['Total Revenue','Avg/Day']};
-  document.getElementById('fTotal').textContent = fmt(total);
-  document.getElementById('fDaily').textContent = fmt(daily);
-  document.getElementById('fTotalLabel').textContent = typeLabels[type][0]+` (${days}d)`;
-  document.getElementById('fDailyLabel').textContent = typeLabels[type][1];
-  document.getElementById('fTrend').innerHTML = `<span class="${trendUp?'trend-up':'trend-down'}">${trendUp?'▲':'▼'} ${Math.abs(trendPct)}%</span>`;
-  const colors = {demand:'#4f46e5',sales:'#10b981',revenue:'#f59e0b'};
-  const col = colors[type];
-  if (forecastChart) forecastChart.destroy();
-  forecastChart = new Chart(document.getElementById('forecastChart').getContext('2d'),{
-    type:'line',
-    data:{ labels:data.labels, datasets:[{ label:type, data:data.values, borderColor:col, backgroundColor:col+'22', fill:true, tension:0.4, pointRadius:days>30?2:4, pointHoverRadius:6 }] },
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>type==='demand'?`${Math.round(c.raw)} units`:`$${c.raw.toFixed(2)}`}} },
-      scales:{ y:{beginAtZero:false,grid:{color:'#f1f5f9'},ticks:{callback:v=>type==='demand'?v:'$'+v.toFixed(0)}}, x:{grid:{display:false},ticks:{maxTicksLimit:10,maxRotation:45}} }
+function showForecastError(msg) {
+  ['demandForecastErr','revForecastErr','profitForecastErr'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = msg;
+      el.classList.remove('d-none');
     }
   });
 }
 
-// Inventory
-function loadInventory() {
-  const products = [
-    {name:'MacBook Pro',cat:0,price:1299.99,stock:50},{name:'iPhone 15',cat:0,price:999.99,stock:100},
-    {name:'AirPods Pro',cat:0,price:249.99,stock:200},{name:'iPad Air',cat:0,price:599.99,stock:75},
-    {name:'Apple Watch',cat:0,price:399.99,stock:150},{name:'Leather Jacket',cat:1,price:199.99,stock:80},
-    {name:'Designer Jeans',cat:1,price:89.99,stock:120},{name:'Cotton T-Shirt',cat:1,price:29.99,stock:300},
-    {name:'Winter Coat',cat:1,price:149.99,stock:20},{name:'Running Shoes',cat:1,price:79.99,stock:90},
-    {name:'Organic Apples',cat:2,price:4.99,stock:500},{name:'Fresh Milk',cat:2,price:3.49,stock:400},
-    {name:'Whole Wheat Bread',cat:2,price:2.99,stock:300},{name:'Free Range Eggs',cat:2,price:5.99,stock:250},
-    {name:'Coffee Beans',cat:2,price:12.99,stock:150},{name:'Coffee Table',cat:3,price:199.99,stock:40},
-    {name:'Floor Lamp',cat:3,price:89.99,stock:15},{name:'Wall Art',cat:3,price:49.99,stock:100},
-    {name:'Throw Pillows',cat:3,price:24.99,stock:150},{name:'Area Rug',cat:3,price:149.99,stock:8},
-    {name:'Yoga Mat',cat:4,price:29.99,stock:120},{name:'Dumbbells Set',cat:4,price:79.99,stock:80},
-    {name:'Resistance Bands',cat:4,price:19.99,stock:200},{name:'Exercise Ball',cat:4,price:34.99,stock:60},
-    {name:'Fitness Tracker',cat:4,price:59.99,stock:22},
-  ];
-  const bases = [12,25,80,15,20];
-  allInventory = products.map(p => {
-    const daily = bases[p.cat]*(0.9+Math.random()*.2);
-    const forecast30 = Math.round(daily*30);
-    const reorder = Math.round(daily*7+30);
-    const ratio = p.stock/Math.max(1,reorder*2);
-    const status = p.stock<=reorder*.5?'critical':p.stock<=reorder?'low':'ok';
-    return {...p,daily,forecast30,reorder,ratio,status};
+function hideForecastErrors() {
+  ['demandForecastErr','revForecastErr','profitForecastErr'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('d-none');
   });
-  renderInventory(allInventory);
-  renderSuggestions(allInventory);
 }
 
-function filterInventory(f,btn) {
-  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  renderInventory(f==='all'?allInventory:allInventory.filter(p=>p.status===f));
+async function loadForecastAll() {
+  hideForecastErrors();
+  const days = getForecastDays();
+  document.getElementById('demandTotalLbl').textContent = 'Total forecasted units (' + days + 'd)';
+  document.getElementById('revTotalLbl').textContent = 'Total forecasted revenue (' + days + 'd)';
+  document.getElementById('profitTotalLbl').textContent = 'Total profit (' + days + 'd)';
+
+  ['demandTotal','demandDaily','demandTrend','revTotal','revDaily','revPeak','profitTotal','profitDaily','profitTrend'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="spin"></span>';
+  });
+  document.getElementById('profitMarginBadge').textContent = 'Margin —';
+
+  try {
+    const r = await fetch('/api/forecast', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days })
+    });
+    const data = await r.json();
+    if (!r.ok || data.error) {
+      showForecastError(data.error || 'Forecast unavailable.');
+      return;
+    }
+    lastForecastPayload = data;
+    renderDemandSection(data, days);
+    renderRevenueSection(data, days);
+    renderProfitSection(data, days);
+  } catch (e) {
+    showForecastError('Forecast request failed.');
+  }
+}
+
+function renderDemandSection(data, days) {
+  const q = data.demand_forecast || [];
+  const dates = data.future_dates || [];
+  const labels = shortLabels(dates);
+  const total = q.reduce((a, b) => a + b, 0);
+  const daily = total / Math.max(days, 1);
+  const tr = halfTrendPct(q);
+  document.getElementById('demandTotal').textContent = Math.round(total).toLocaleString() + ' units';
+  document.getElementById('demandDaily').textContent = (daily).toFixed(1) + ' units';
+  document.getElementById('demandTrend').innerHTML = '<span class="' + (tr.up ? 'trend-up' : 'trend-down') + '">' + (tr.up ? '▲' : '▼') + ' ' + Math.abs(parseFloat(tr.pct)) + '%</span>';
+
+  if (demandChart) demandChart.destroy();
+  demandChart = new Chart(document.getElementById('demandAreaChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Demand (units)',
+        data: q,
+        borderColor: '#4338ca',
+        backgroundColor: 'rgba(67, 56, 202, 0.2)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: days > 30 ? 2 : 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => Math.round(c.raw) + ' units' } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, maxRotation: 45 } }
+      }
+    }
+  });
+}
+
+function renderRevenueSection(data, days) {
+  const s = data.sales_forecast || [];
+  const dates = data.future_dates || [];
+  const labels = shortLabels(dates);
+  const total = s.reduce((a, b) => a + b, 0);
+  const daily = total / Math.max(days, 1);
+  let peakIdx = 0;
+  s.forEach((v, i) => { if (v > (s[peakIdx] || 0)) peakIdx = i; });
+  const peakLabel = dates[peakIdx] ? new Date(dates[peakIdx] + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+
+  document.getElementById('revTotal').textContent = '$' + Math.round(total).toLocaleString();
+  document.getElementById('revDaily').textContent = '$' + Math.round(daily).toLocaleString();
+  document.getElementById('revPeak').textContent = peakLabel + ' · $' + Math.round(s[peakIdx] || 0).toLocaleString();
+
+  if (revenueChart) revenueChart.destroy();
+  revenueChart = new Chart(document.getElementById('revenueBarChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Revenue',
+        data: s,
+        backgroundColor: 'rgba(16, 185, 129, 0.75)',
+        borderColor: '#059669',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '$' + (c.raw || 0).toFixed(0) } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, maxRotation: 45 } }
+      }
+    }
+  });
+}
+
+function renderProfitSection(data, days) {
+  const profit = data.profit_forecast || [];
+  const sales = data.sales_forecast || [];
+  const dates = data.future_dates || [];
+  const labels = shortLabels(dates);
+  const cost = sales.map((sv, i) => Math.max(0, sv - (profit[i] || 0)));
+
+  const totalP = profit.reduce((a, b) => a + b, 0);
+  const totalS = sales.reduce((a, b) => a + b, 0);
+  const dailyP = totalP / Math.max(days, 1);
+  const marginPct = totalS > 0 ? (totalP / totalS * 100).toFixed(1) : '0.0';
+  const tr = halfTrendPct(profit);
+
+  document.getElementById('profitTotal').textContent = '$' + Math.round(totalP).toLocaleString();
+  document.getElementById('profitDaily').textContent = '$' + Math.round(dailyP).toLocaleString();
+  document.getElementById('profitTrend').innerHTML = '<span class="' + (tr.up ? 'trend-up' : 'trend-down') + '">' + (tr.up ? '▲' : '▼') + ' ' + Math.abs(parseFloat(tr.pct)) + '%</span>';
+  document.getElementById('profitMarginBadge').textContent = 'Margin ' + marginPct + '%';
+
+  if (profitChart) profitChart.destroy();
+  profitChart = new Chart(document.getElementById('profitDualChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Profit',
+          data: profit,
+          borderColor: '#ea580c',
+          backgroundColor: 'rgba(234, 88, 12, 0.08)',
+          fill: false,
+          tension: 0.35,
+          pointRadius: days > 30 ? 2 : 3
+        },
+        {
+          label: 'Est. cost (sales − profit)',
+          data: cost,
+          borderColor: '#dc2626',
+          borderDash: [6, 4],
+          fill: false,
+          tension: 0.35,
+          pointRadius: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => c.dataset.label + ': $' + (c.raw || 0).toFixed(0) } }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, maxRotation: 45 } }
+      }
+    }
+  });
+}
+
+async function loadInventory() {
+  const tbody = document.getElementById('inventoryBody');
+  const errEl = document.getElementById('inventoryErr');
+  errEl.classList.add('d-none');
+  try {
+    const r = await fetch('/api/inventory-status', { credentials: 'same-origin' });
+    const data = await r.json();
+    if (!r.ok || !Array.isArray(data)) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Could not load inventory.</td></tr>';
+      errEl.textContent = 'Inventory data could not be loaded.';
+      errEl.classList.remove('d-none');
+      document.getElementById('suggestionsBody').innerHTML = '<p class="text-danger text-center py-3">Suggestions unavailable.</p>';
+      return;
+    }
+    allInventory = data.map(row => ({
+      ...row,
+      ratio: row.stock / Math.max(1, row.reorder_point * 2)
+    }));
+    renderInventory(allInventory);
+    renderSuggestions(allInventory);
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Could not load inventory.</td></tr>';
+    errEl.textContent = 'Inventory request failed.';
+    errEl.classList.remove('d-none');
+    document.getElementById('suggestionsBody').innerHTML = '<p class="text-danger text-center py-3">Suggestions unavailable.</p>';
+  }
+}
+
+function filterInventory(f, btn) {
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderInventory(f === 'all' ? allInventory : allInventory.filter(p => p.status === f));
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
 
 function renderInventory(items) {
   const tbody = document.getElementById('inventoryBody');
-  if (!items.length) { tbody.innerHTML='<tr><td colspan="7" class="text-center py-4 text-muted">No items.</td></tr>'; return; }
-  tbody.innerHTML = items.map(p=>{
-    const pct = Math.min(100,Math.round(p.ratio*100));
-    const barC = p.status==='critical'?'#ef4444':p.status==='low'?'#f59e0b':'#10b981';
-    const badge = p.status==='critical'?'<span class="badge-critical">🔴 Critical</span>':p.status==='low'?'<span class="badge-low">🟡 Low</span>':'<span class="badge-ok">🟢 OK</span>';
-    const action = p.status!=='ok'
-      ?`<button class="btn btn-sm btn-warning fw-semibold" onclick="showOrderModal('${p.name}',${p.reorder},${p.stock})"><i class="fas fa-cart-plus me-1"></i>Reorder</button>`
-      :`<span class="text-muted small">—</span>`;
-    return `<tr>
-      <td><strong>${p.name}</strong><br><small class="text-muted">$${p.price.toFixed(2)}</small></td>
-      <td><span style="color:${CAT_COLORS[p.cat]};font-weight:600">${CATS[p.cat]}</span></td>
-      <td><span class="stock-bar-wrap"><span class="stock-bar" style="width:${pct}%;background:${barC}"></span></span><strong>${p.stock}</strong> units</td>
-      <td>${p.reorder} units</td>
-      <td>${p.forecast30} units</td>
-      <td>${badge}</td>
-      <td>${action}</td>
-    </tr>`;
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No items.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(p => {
+    const cat = CATS[p.category] != null ? CATS[p.category] : 'Other';
+    const col = CAT_COLORS[p.category] || '#64748b';
+    const pct = Math.min(100, Math.round((p.ratio || 0) * 100));
+    const barC = p.status === 'critical' ? '#ef4444' : p.status === 'low' ? '#f59e0b' : '#10b981';
+    const badge = p.status === 'critical' ? '<span class="badge-critical">🔴 Critical</span>' : p.status === 'low' ? '<span class="badge-low">🟡 Low</span>' : '<span class="badge-ok">🟢 OK</span>';
+    const nm = esc(p.name);
+    const action = p.status !== 'ok'
+      ? '<button type="button" class="btn btn-sm btn-warning fw-semibold reorder-btn" data-name="' + esc(p.name).replace(/"/g, '&quot;') + '" data-suggested="' + (p.suggested_order || 0) + '" data-stock="' + p.stock + '" data-reorder="' + p.reorder_point + '"><i class="fas fa-cart-plus me-1"></i>Reorder</button>'
+      : '<span class="text-muted small">—</span>';
+    return '<tr>' +
+      '<td><strong>' + nm + '</strong><br><small class="text-muted">$' + Number(p.price || 0).toFixed(2) + '</small></td>' +
+      '<td><span style="color:' + col + ';font-weight:600">' + esc(cat) + '</span></td>' +
+      '<td><span class="stock-bar-wrap"><span class="stock-bar" style="width:' + pct + '%;background:' + barC + '"></span></span><strong>' + p.stock + '</strong> units</td>' +
+      '<td>' + p.reorder_point + ' units</td>' +
+      '<td>' + (p.forecast_30d != null ? p.forecast_30d : '—') + ' units</td>' +
+      '<td>' + badge + '</td>' +
+      '<td>' + action + '</td>' +
+      '</tr>';
   }).join('');
 }
 
 function renderSuggestions(items) {
-  const critical=items.filter(p=>p.status==='critical');
-  const low=items.filter(p=>p.status==='low');
-  const ok=items.filter(p=>p.status==='ok');
-  let html='';
-  critical.forEach(p=>{
-    const needed=Math.round(p.reorder*2-p.stock);
-    html+=`<div class="suggestion urgent"><div class="suggestion-icon">🚨</div><div>
-      <div class="suggestion-title">URGENT: Restock ${p.name} immediately</div>
-      <div class="suggestion-text">Current stock <strong>${p.stock} units</strong> is critically below reorder point (<strong>${p.reorder}</strong>). 30-day demand forecast: <strong>${p.forecast30} units</strong>. Order at least <strong>${needed} units</strong> now to avoid stockout.</div>
-    </div></div>`;
+  const critical = items.filter(p => p.status === 'critical');
+  const low = items.filter(p => p.status === 'low');
+  const ok = items.filter(p => p.status === 'ok');
+  let html = '';
+  critical.forEach(p => {
+    const below = Math.max(0, p.reorder_point - p.stock);
+    html += '<div class="suggestion urgent"><div class="suggestion-icon">🚨</div><div>' +
+      '<div class="suggestion-title">URGENT: Restock ' + esc(p.name) + '</div>' +
+      '<div class="suggestion-text">' + below + ' units below reorder point. Order <strong>' + (p.suggested_order || 0) + '</strong> units now.</div>' +
+      '</div></div>';
   });
-  low.forEach(p=>{
-    const needed=Math.round(p.reorder*1.5-p.stock);
-    html+=`<div class="suggestion reorder"><div class="suggestion-icon">⚠️</div><div>
-      <div class="suggestion-title">Plan reorder for ${p.name}</div>
-      <div class="suggestion-text">Stock of <strong>${p.stock} units</strong> is approaching the reorder threshold. 30-day forecast demand: <strong>${p.forecast30} units</strong>. Consider ordering <strong>~${needed} units</strong> within the next few days.</div>
-    </div></div>`;
+  low.forEach(p => {
+    const daily = p.daily_demand || 1;
+    const cover = daily > 0 ? Math.round(p.stock / daily) : 0;
+    html += '<div class="suggestion reorder"><div class="suggestion-icon">⚠️</div><div>' +
+      '<div class="suggestion-title">Plan reorder for ' + esc(p.name) + '</div>' +
+      '<div class="suggestion-text">30-day demand forecast is <strong>' + (p.forecast_30d || 0) + '</strong> units; stock covers about <strong>' + cover + '</strong> days at current pace.</div>' +
+      '</div></div>';
   });
-  if (ok.length) html+=`<div class="suggestion good"><div class="suggestion-icon">✅</div><div>
-    <div class="suggestion-title">${ok.length} products are well-stocked</div>
-    <div class="suggestion-text">${ok.slice(0,3).map(p=>p.name).join(', ')}${ok.length>3?` and ${ok.length-3} more`:''} have sufficient inventory to meet forecasted demand. No action required.</div>
-  </div></div>`;
-  document.getElementById('suggestionsBody').innerHTML = html||'<p class="text-muted text-center py-3">All inventory healthy.</p>';
+  if (ok.length) {
+    html += '<div class="suggestion good"><div class="suggestion-icon">✅</div><div>' +
+      '<div class="suggestion-title">' + ok.length + ' products are well-stocked</div>' +
+      '<div class="suggestion-text">No action required for these SKUs.</div></div></div>';
+  }
+  document.getElementById('suggestionsBody').innerHTML = html || '<p class="text-muted text-center py-3">No inventory insights.</p>';
 }
 
-function showOrderModal(name,reorder,stock) {
-  const needed=Math.max(0,Math.round(reorder*2-stock));
-  alert(`📦 Reorder Request: ${name}\n\nCurrent Stock: ${stock} units\nReorder Point: ${reorder} units\nSuggested Order Qty: ${needed} units\n\nPlease notify your manager or submit a purchase order.`);
+function showOrderModal(name, suggested, stock, reorder) {
+  const qty = Math.max(0, Math.round(suggested));
+  alert('📦 Reorder: ' + name + '\n\nCurrent stock: ' + stock + ' units\nReorder point: ' + reorder + ' units\nSuggested order qty: ' + qty + ' units');
 }
 
-// Leaderboard
 async function loadLeaderboard() {
+  const host = document.getElementById('leaderboard');
+  const errEl = document.getElementById('leaderboardErr');
+  errEl.classList.add('d-none');
   try {
-    const r=await fetch('/api/employee-metrics');
-    const d=await r.json();
-    renderLeaderboard((d.length?d:demoLeaders()).slice(0,5));
-  } catch(e){ renderLeaderboard(demoLeaders()); }
+    const r = await fetch('/api/employee-metrics', { credentials: 'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !Array.isArray(d) || d.length === 0) {
+      host.innerHTML = '';
+      errEl.textContent = 'Leaderboard could not be loaded.';
+      errEl.classList.remove('d-none');
+      return;
+    }
+    renderLeaderboard(d.slice(0, 5));
+  } catch (e) {
+    host.innerHTML = '';
+    errEl.textContent = 'Leaderboard request failed.';
+    errEl.classList.remove('d-none');
+  }
 }
 
 function renderLeaderboard(emps) {
-  const medals=['rank-1','rank-2','rank-3','rank-n','rank-n'];
-  const icons=['🥇','🥈','🥉','4','5'];
-  const maxS=Math.max(...emps.map(e=>e.total_sales));
-  document.getElementById('leaderboard').innerHTML=emps.map((e,i)=>`
-    <div class="leader-item">
-      <div class="leader-rank ${medals[i]}">${icons[i]}</div>
-      <div class="leader-avatar">${e.name.charAt(0)}</div>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:14px;color:#1e293b">${e.name}</div>
-        <div style="font-size:12px;color:#94a3b8">${e.position||'Sales Associate'}</div>
-        <div class="perf-bar-wrap"><div class="perf-bar" style="width:${Math.round((e.total_sales/maxS)*100)}%"></div></div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-weight:700;color:#1e293b">$${(e.total_sales||0).toLocaleString(undefined,{maximumFractionDigits:0})}</div>
-        <div style="font-size:12px;color:#94a3b8">${e.total_transactions||0} txns &nbsp;·&nbsp; ${(e.performance_rating||0).toFixed(1)}/10</div>
-      </div>
-    </div>`).join('');
+  const medals = ['rank-1', 'rank-2', 'rank-3', 'rank-n', 'rank-n'];
+  const icons = ['🥇', '🥈', '🥉', '4', '5'];
+  const maxS = Math.max(...emps.map(e => e.total_sales || 0), 1);
+  document.getElementById('leaderboard').innerHTML = emps.map((e, i) => {
+    const selfCls = empId !== null && e.id === empId ? ' leader-self' : '';
+    return '<div class="leader-item' + selfCls + '">' +
+      '<div class="leader-rank ' + medals[i] + '">' + icons[i] + '</div>' +
+      '<div class="leader-avatar">' + esc((e.name || '?').charAt(0)) + '</div>' +
+      '<div style="flex:1">' +
+      '<div style="font-weight:700;font-size:14px;color:#1e293b">' + esc(e.name) + '</div>' +
+      '<div style="font-size:12px;color:#94a3b8">' + esc(e.position || 'Sales Associate') + '</div>' +
+      '<div class="perf-bar-wrap"><div class="perf-bar" style="width:' + Math.round(((e.total_sales || 0) / maxS) * 100) + '%"></div></div>' +
+      '</div>' +
+      '<div style="text-align:right">' +
+      '<div style="font-weight:700;color:#1e293b">$' + (e.total_sales || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) + '</div>' +
+      '<div style="font-size:12px;color:#94a3b8">' + (e.total_transactions || 0) + ' txns &nbsp;·&nbsp; ' + Number(e.performance_rating || 0).toFixed(1) + '/10</div>' +
+      '</div></div>';
+  }).join('');
 }
 
-// Personal charts
 function createMySalesChart(ds) {
-  const dates=Object.keys(ds).sort().slice(-30);
-  const vals=dates.map(d=>ds[d]);
-  if(mySalesChart)mySalesChart.destroy();
-  mySalesChart=new Chart(document.getElementById('mySalesChart').getContext('2d'),{
-    type:'line',data:{labels:dates,datasets:[{label:'Sales ($)',data:vals,borderColor:'#3b82f6',backgroundColor:'#3b82f622',fill:true,tension:0.4,pointRadius:3}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v}},x:{ticks:{maxTicksLimit:8,maxRotation:45},grid:{display:false}}}}
-  });
-}
-function createMyProductsChart(tp) {
-  if(myProductsChart)myProductsChart.destroy();
-  myProductsChart=new Chart(document.getElementById('myProductsChart').getContext('2d'),{
-    type:'bar',data:{labels:Object.keys(tp),datasets:[{label:'Revenue ($)',data:Object.values(tp),backgroundColor:CAT_COLORS,borderRadius:6}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v}},x:{grid:{display:false}}}}
+  const dates = Object.keys(ds).sort().slice(-30);
+  const vals = dates.map(d => ds[d]);
+  if (mySalesChart) mySalesChart.destroy();
+  const ctx = document.getElementById('mySalesChart');
+  if (!dates.length) {
+    mySalesChart = new Chart(ctx.getContext('2d'), {
+      type: 'line',
+      data: { labels: ['—'], datasets: [{ label: 'Sales ($)', data: [0], borderColor: '#cbd5e1', tension: 0.3 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+    return;
+  }
+  mySalesChart = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: { labels: dates, datasets: [{ label: 'Sales ($)', data: vals, borderColor: '#3b82f6', backgroundColor: '#3b82f622', fill: true, tension: 0.4, pointRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } }, x: { ticks: { maxTicksLimit: 8, maxRotation: 45 }, grid: { display: false } } } }
   });
 }
 
-// Helpers
-function demoDailySales(){const d={},t=new Date();for(let i=30;i>=0;i--){const x=new Date(t);x.setDate(t.getDate()-i);d[x.toISOString().split('T')[0]]=200+Math.random()*600;}return d;}
-function demoLeaders(){return[
-  {name:'Alice Johnson',position:'Senior Sales Associate',total_sales:18450,total_transactions:523,performance_rating:9.2},
-  {name:'Carol Davis',position:'Sales Lead',total_sales:15670,total_transactions:445,performance_rating:8.7},
-  {name:'Bob Smith',position:'Sales Associate',total_sales:12450,total_transactions:342,performance_rating:8.5},
-  {name:'Emma Brown',position:'Sales Associate',total_sales:9870,total_transactions:278,performance_rating:7.8},
-  {name:'David Wilson',position:'Sales Associate',total_sales:7650,total_transactions:198,performance_rating:6.9},
-];}
+function createMyProductsChart(tp) {
+  const keys = Object.keys(tp || {});
+  if (myProductsChart) myProductsChart.destroy();
+  const ctx = document.getElementById('myProductsChart');
+  if (!keys.length) {
+    myProductsChart = new Chart(ctx.getContext('2d'), {
+      type: 'bar',
+      data: { labels: ['No data'], datasets: [{ data: [0], backgroundColor: '#e2e8f0' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+    return;
+  }
+  myProductsChart = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: { labels: keys, datasets: [{ label: 'Revenue ($)', data: keys.map(k => tp[k]), backgroundColor: CAT_COLORS, borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } }, x: { grid: { display: false } } } }
+  });
+}
 </script>
 {% endblock %}

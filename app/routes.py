@@ -14,6 +14,7 @@ import logging
 from app.auth import login_required
 from src.predict import Predictor
 from src.preprocessing import DataPreprocessor
+from src.forecast_engine import generate_forecast
 from config import Config
 
 from app.models import db, User, Employee, Product, Sale, Inventory
@@ -75,41 +76,13 @@ def manager_dashboard():
 @routes_bp.route('/employee-dashboard')
 @login_required(role='employee')
 def employee_dashboard():
-    """Employee dashboard"""
-    employee_id = session['user'].get('employee_id')
-
-    df = preprocessor.load_raw_data()
-
-    if df is not None and employee_id:
-        # employee_id in CSV is like 'EMP_1', but in DB it's an int — handle both
-        employee_data = df[df['employee_id'] == employee_id]
-        if employee_data.empty:
-            # Try string match e.g. 'EMP_1'
-            employee_data = df[df['employee_id'] == f'EMP_{employee_id}']
-
-        if not employee_data.empty:
-            employee_metrics = {
-                'total_sales': employee_data['revenue'].sum(),
-                'total_transactions': len(employee_data),
-                'avg_transaction': employee_data['revenue'].mean(),
-                'total_profit': employee_data['profit'].sum()
-            }
-        else:
-            employee_metrics = {
-                'total_sales': 0,
-                'total_transactions': 0,
-                'avg_transaction': 0,
-                'total_profit': 0
-            }
-    else:
-        employee_metrics = None
-
-    # Pass datetime.now() result (not the function) to template
-    return render_template('employee_dashboard.html',
-                           employee_name=session['user']['name'],
-                           employee_id=employee_id,
-                           metrics=employee_metrics,
-                           now=datetime.now())
+    """Employee dashboard — KPIs load from /api/employee/<id>/metrics in the browser."""
+    return render_template(
+        'employee_dashboard.html',
+        employee_name=session['user']['name'],
+        employee_id=session['user'].get('employee_id'),
+        now=datetime.now(),
+    )
 
 # ── API: Predictions ────────────────────────────────────────────────────────
 
@@ -436,3 +409,200 @@ def optimize_profit_api():
                 {'discount_pct': 20, 'predicted_profit': 54000}
             ]
         })
+    
+@routes_bp.route('/api/full-forecast', methods=['GET'])
+@login_required(role='manager')
+def full_forecast():
+    try:
+        df = preprocessor.load_raw_data()
+        if df is None or df.empty:
+            return jsonify({'error': 'No data'}), 404
+
+        df['date'] = pd.to_datetime(df['date'])
+
+        last_data = df.sort_values('date').iloc[-1]
+
+        forecasts = []
+
+        for i in range(1, 31):
+            future_date = datetime.now() + timedelta(days=i)
+
+            input_data = {
+                'category': last_data['category'],
+                'unit_price': last_data['unit_price'],
+                'discount_pct': last_data['discount_pct'],
+                'promotion': last_data['promotion'],
+                'month': future_date.month,
+                'day': future_date.day,
+                'weekday': future_date.weekday(),
+                'is_weekend': 1 if future_date.weekday() >= 5 else 0,
+                'festival': 0,
+                'lag_1_day_sales': last_data['revenue'],
+                'lag_7_day_sales': last_data['revenue'],
+                'rolling_7d_avg_sales': last_data['revenue']
+            }
+
+            pred = predictor.predict_all(input_data)
+
+            forecasts.append({
+                'date': future_date.strftime('%Y-%m-%d'),
+                'sales': float(pred['sales'] or 0),
+                'demand': float(pred['demand'] or 0),
+                'profit': float(pred['profit'] or 0)
+            })
+
+        return jsonify(forecasts)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@routes_bp.route('/api/ml/optimize-inventory', methods=['POST'])
+@login_required()
+def optimize_inventory_ml():
+    """ML-backed inventory optimization using trained demand model."""
+    try:
+        data = request.get_json() or {}
+        rec = predictor.optimize_inventory(data)
+        if rec is None:
+            return jsonify({'error': 'ML optimization unavailable; train models first.'}), 503
+        return jsonify(rec)
+    except Exception as e:
+        logger.error(f"ML inventory optimization error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@routes_bp.route('/api/ml/optimize-profit', methods=['POST'])
+@login_required()
+def optimize_profit_ml():
+    """ML-backed profit scenario search using trained profit model."""
+    try:
+        data = request.get_json() or {}
+        rec = predictor.optimize_profit(data)
+        if rec is None:
+            return jsonify({'error': 'ML optimization unavailable; train models first.'}), 503
+        return jsonify(rec)
+    except Exception as e:
+        logger.error(f"ML profit optimization error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@routes_bp.route('/api/forecast', methods=['POST'])
+@login_required()
+def forecast_api():
+    """Real forecast using forecast_engine.py."""
+    try:
+        data = request.get_json() or {}
+        days = int(data.get('days', 30))
+        festival_days = data.get('festival_days', [])
+        df = preprocessor.load_raw_data()
+        if df is None or df.empty:
+            return jsonify({'error': 'No data available'}), 404
+        result = generate_forecast(df, days=days, festival_days=festival_days)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Forecast error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@routes_bp.route('/products')
+@login_required()
+def product_management():
+    products = Product.query.all()
+    return render_template('product_management.html', products=products)
+
+
+@routes_bp.route('/api/inventory-status', methods=['GET'])
+@login_required()
+def inventory_status():
+    """Return inventory status for all products with demand forecast."""
+    try:
+        df = preprocessor.load_raw_data()
+        forecast_result = generate_forecast(df, days=30) if df is not None and not df.empty else None
+        avg_daily_demand = (
+            float(np.mean(forecast_result['demand_forecast'])) if forecast_result else 50.0
+        )
+
+        products = Product.query.all()
+        inventory_records = {inv.product_id: inv for inv in Inventory.query.all()}
+
+        cat_scale = [0.15, 0.25, 0.80, 0.15, 0.20]
+        result = []
+        for product in products:
+            inv = inventory_records.get(product.id)
+            stock = inv.stock_level if inv else product.stock
+            reorder = inv.reorder_point if inv else 50
+
+            c = product.category if product.category is not None else 0
+            daily_demand = avg_daily_demand * cat_scale[c] if c < len(cat_scale) else avg_daily_demand * 0.2
+            forecast_30d = round(daily_demand * 30)
+
+            status = (
+                'critical' if stock < reorder * 0.5
+                else 'low' if stock < reorder
+                else 'ok'
+            )
+
+            result.append({
+                'id': product.id,
+                'name': product.name,
+                'category': product.category,
+                'price': product.price,
+                'stock': stock,
+                'reorder_point': reorder,
+                'forecast_30d': forecast_30d,
+                'daily_demand': round(daily_demand, 1),
+                'status': status,
+                'suggested_order': max(0, round(reorder * 2 - stock)),
+            })
+
+        order = {'critical': 0, 'low': 1, 'ok': 2}
+        result.sort(key=lambda x: order[x['status']])
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Inventory status error: {e}")
+        return jsonify([]), 500
+
+
+@routes_bp.route('/api/inventory-insights', methods=['GET'])
+@login_required(role='manager')
+def inventory_insights():
+    try:
+        products = Product.query.all()
+
+        insights = []
+
+        for p in products:
+            product_data = {
+                'category': p.category,
+                'unit_price': p.price,
+                'stock_available': p.stock
+            }
+
+            demand = predictor.predict_demand(product_data) or 0
+
+            status = "OK"
+            suggestion = "Maintain stock"
+
+            if p.stock < demand * 0.5:
+                status = "CRITICAL"
+                suggestion = "Reorder immediately"
+            elif p.stock < demand:
+                status = "LOW"
+                suggestion = "Reorder soon"
+            elif p.stock > demand * 2:
+                status = "OVERSTOCK"
+                suggestion = "Reduce stock / run discounts"
+
+            insights.append({
+                'product': p.name,
+                'stock': p.stock,
+                'predicted_demand': float(demand),
+                'status': status,
+                'suggestion': suggestion
+            })
+
+        return jsonify(insights)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
