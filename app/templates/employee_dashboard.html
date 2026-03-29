@@ -52,6 +52,15 @@
   .cat-btn.active{background:var(--primary);color:white;border-color:var(--primary)}
   .days-sel{padding:6px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#374151;background:white}
   .margin-badge{font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+  .sugg-table{width:100%;border-collapse:collapse}
+  .sugg-table th{background:#f8fafc;padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase}
+  .sugg-table td{padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
+  .sugg-table tr.row-critical td{background:#fef2f2}
+  .sugg-table tr.row-low td{background:#fefce8}
+  .sugg-table tr.row-ok td{background:#f0fdf4}
+  .prio-critical{color:#991b1b;font-weight:700}
+  .prio-low{color:#854d0e;font-weight:700}
+  .prio-ok{color:#166534;font-weight:700}
 </style>
 {% endblock %}
 
@@ -262,13 +271,15 @@
     </div>
   </div>
 
-  <!-- Section 5: AI suggestions -->
+  <!-- Section 5: AI suggestions (table) -->
   <div class="section-card">
     <div class="section-header">
       <h5><i class="fas fa-lightbulb text-warning me-2"></i>AI Inventory Suggestions</h5>
     </div>
-    <div class="section-body" id="suggestionsBody">
-      <div class="text-center py-3"><span class="spin"></span> Analysing inventory…</div>
+    <div class="section-body p-0" style="overflow-x:auto">
+      <div id="suggestionsBody" class="p-3">
+        <div class="text-center py-3"><span class="spin"></span> Analysing inventory…</div>
+      </div>
     </div>
   </div>
 
@@ -301,6 +312,7 @@
 {% block extra_js %}
 <script>
 const empId = {{ employee_id | tojson }};
+const isManager = {{ (user_role == 'manager') | tojson }};
 const CATS = ['Electronics','Clothing','Groceries','Home','Sports'];
 const CAT_COLORS = ['#4f46e5','#10b981','#f59e0b','#3b82f6','#ef4444'];
 
@@ -606,6 +618,7 @@ async function loadInventory() {
     }
     allInventory = data.map(row => ({
       ...row,
+      inventory: { stock: row.stock },
       ratio: row.stock / Math.max(1, row.reorder_point * 2)
     }));
     renderInventory(allInventory);
@@ -641,13 +654,16 @@ function renderInventory(items) {
     const barC = p.status === 'critical' ? '#ef4444' : p.status === 'low' ? '#f59e0b' : '#10b981';
     const badge = p.status === 'critical' ? '<span class="badge-critical">🔴 Critical</span>' : p.status === 'low' ? '<span class="badge-low">🟡 Low</span>' : '<span class="badge-ok">🟢 OK</span>';
     const nm = esc(p.name);
-    const action = p.status !== 'ok'
-      ? '<button type="button" class="btn btn-sm btn-warning fw-semibold reorder-btn" data-name="' + esc(p.name).replace(/"/g, '&quot;') + '" data-suggested="' + (p.suggested_order || 0) + '" data-stock="' + p.stock + '" data-reorder="' + p.reorder_point + '"><i class="fas fa-cart-plus me-1"></i>Reorder</button>'
-      : '<span class="text-muted small">—</span>';
+    const invStock = p.inventory && p.inventory.stock != null ? p.inventory.stock : p.stock;
+    const action = (isManager && p.status !== 'ok')
+      ? '<button type="button" class="btn btn-sm btn-warning fw-semibold reorder-btn" data-name="' + esc(p.name).replace(/"/g, '&quot;') + '" data-suggested="' + (p.suggested_order || 0) + '" data-stock="' + invStock + '" data-reorder="' + p.reorder_point + '"><i class="fas fa-cart-plus me-1"></i>Reorder</button>'
+      : (!isManager && p.status !== 'ok')
+        ? '<span class="text-muted small">Manager only</span>'
+        : '<span class="text-muted small">—</span>';
     return '<tr>' +
       '<td><strong>' + nm + '</strong><br><small class="text-muted">$' + Number(p.price || 0).toFixed(2) + '</small></td>' +
       '<td><span style="color:' + col + ';font-weight:600">' + esc(cat) + '</span></td>' +
-      '<td><span class="stock-bar-wrap"><span class="stock-bar" style="width:' + pct + '%;background:' + barC + '"></span></span><strong>' + p.stock + '</strong> units</td>' +
+      '<td><span class="stock-bar-wrap"><span class="stock-bar" style="width:' + pct + '%;background:' + barC + '"></span></span><strong>' + invStock + '</strong> units</td>' +
       '<td>' + p.reorder_point + ' units</td>' +
       '<td>' + (p.forecast_30d != null ? p.forecast_30d : '—') + ' units</td>' +
       '<td>' + badge + '</td>' +
@@ -657,31 +673,30 @@ function renderInventory(items) {
 }
 
 function renderSuggestions(items) {
-  const critical = items.filter(p => p.status === 'critical');
-  const low = items.filter(p => p.status === 'low');
-  const ok = items.filter(p => p.status === 'ok');
-  let html = '';
-  critical.forEach(p => {
-    const below = Math.max(0, p.reorder_point - p.stock);
-    html += '<div class="suggestion urgent"><div class="suggestion-icon">🚨</div><div>' +
-      '<div class="suggestion-title">URGENT: Restock ' + esc(p.name) + '</div>' +
-      '<div class="suggestion-text">' + below + ' units below reorder point. Order <strong>' + (p.suggested_order || 0) + '</strong> units now.</div>' +
-      '</div></div>';
-  });
-  low.forEach(p => {
-    const daily = p.daily_demand || 1;
-    const cover = daily > 0 ? Math.round(p.stock / daily) : 0;
-    html += '<div class="suggestion reorder"><div class="suggestion-icon">⚠️</div><div>' +
-      '<div class="suggestion-title">Plan reorder for ' + esc(p.name) + '</div>' +
-      '<div class="suggestion-text">30-day demand forecast is <strong>' + (p.forecast_30d || 0) + '</strong> units; stock covers about <strong>' + cover + '</strong> days at current pace.</div>' +
-      '</div></div>';
-  });
-  if (ok.length) {
-    html += '<div class="suggestion good"><div class="suggestion-icon">✅</div><div>' +
-      '<div class="suggestion-title">' + ok.length + ' products are well-stocked</div>' +
-      '<div class="suggestion-text">No action required for these SKUs.</div></div></div>';
+  if (!items.length) {
+    document.getElementById('suggestionsBody').innerHTML = '<p class="text-muted text-center py-3 mb-0">No inventory insights.</p>';
+    return;
   }
-  document.getElementById('suggestionsBody').innerHTML = html || '<p class="text-muted text-center py-3">No inventory insights.</p>';
+  const orderRank = { critical: 0, low: 1, ok: 2 };
+  const sorted = items.slice().sort((a, b) => (orderRank[a.status] ?? 9) - (orderRank[b.status] ?? 9));
+  let rows = '';
+  sorted.forEach(p => {
+    const st = p.status || 'ok';
+    const rowCls = st === 'critical' ? 'row-critical' : st === 'low' ? 'row-low' : 'row-ok';
+    const prioCls = st === 'critical' ? 'prio-critical' : st === 'low' ? 'prio-low' : 'prio-ok';
+    const prioLabel = st === 'critical' ? 'Critical' : st === 'low' ? 'Low' : 'OK';
+    rows += '<tr class="' + rowCls + '">' +
+      '<td><strong>' + esc(p.name) + '</strong></td>' +
+      '<td>' + (p.inventory && p.inventory.stock != null ? p.inventory.stock : (p.stock != null ? p.stock : '—')) + '</td>' +
+      '<td>' + (p.reorder_point != null ? p.reorder_point : '—') + '</td>' +
+      '<td>' + (p.suggested_order != null ? p.suggested_order : '—') + '</td>' +
+      '<td class="' + prioCls + '">' + prioLabel + '</td>' +
+      '</tr>';
+  });
+  document.getElementById('suggestionsBody').innerHTML =
+    '<table class="sugg-table"><thead><tr>' +
+    '<th>Product Name</th><th>Current Stock</th><th>Reorder Point</th><th>Suggested Order Qty</th><th>Priority</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function showOrderModal(name, suggested, stock, reorder) {

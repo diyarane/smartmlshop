@@ -159,8 +159,9 @@ def create_demo_data():
         
         db.session.commit()
         
-        # Create inventory records
+        # Create inventory records (stock_level is source of truth for UI; avoid all-zero display)
         for product in products:
+            product.stock = max(int(product.stock), 8)
             inventory = Inventory(
                 product_id=product.id,
                 stock_level=product.stock,

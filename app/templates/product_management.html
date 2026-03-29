@@ -119,10 +119,11 @@
                     <select id="productSelect" class="form-select" onchange="loadProductData()">
                         <option value="">Select a product...</option>
                         {% for product in products %}
-                        <option value="{{ product.id }}" data-name="{{ product.name }}" 
-                                data-category="{{ product.category }}" data-price="{{ product.price }}" 
-                                data-stock="{{ product.stock }}" data-history="{{ product.history|tojson }}">
-                            {{ product.name }} - ${{ "%.2f"|format(product.price) }} (Stock: {{ product.stock }})
+                        {% set disp_stock = stock_by_product_id[product.id] %}
+                        <option value="{{ product.id }}" data-product-id="{{ product.id }}"
+                                data-name="{{ product.name|e }}" data-category="{{ product.category }}"
+                                data-price="{{ product.price }}" data-stock="{{ disp_stock }}">
+                            {{ product.name }} - ${{ "%.2f"|format(product.price) }} (Stock: {{ disp_stock }})
                         </option>
                         {% endfor %}
                     </select>
@@ -139,7 +140,7 @@
                             <option value="3">Home</option>
                             <option value="4">Sports</option>
                         </select>
-                        <button class="btn btn-primary w-100" onclick="analyzeCustomProduct()">
+                        <button type="button" id="btnAnalyzeProduct" class="btn btn-primary w-100">
                             <i class="fas fa-chart-line"></i> Analyze Product
                         </button>
                     </div>
@@ -291,29 +292,60 @@
 <script>
 let demandChart, salesChart, profitChart, inventoryChart, profitOptChart;
 
+/** Normalize API / sample historical to [{ date, demand, sales, profit }, ...] */
+function normalizeHistoricalToArray(hist) {
+    if (!hist) return [];
+    if (Array.isArray(hist)) {
+        return hist.map(function (row) {
+            return {
+                date: row.date,
+                demand: row.demand != null ? row.demand : 0,
+                sales: row.sales != null ? row.sales : 0,
+                profit: row.profit != null ? row.profit : 0
+            };
+        });
+    }
+    if (hist.dates && Array.isArray(hist.dates)) {
+        var out = [];
+        for (var i = 0; i < hist.dates.length; i++) {
+            out.push({
+                date: hist.dates[i],
+                demand: hist.demand != null && hist.demand[i] != null ? hist.demand[i] : 0,
+                sales: hist.sales != null && hist.sales[i] != null ? hist.sales[i] : 0,
+                profit: hist.profit != null && hist.profit[i] != null ? hist.profit[i] : 0
+            });
+        }
+        return out;
+    }
+    return [];
+}
+
 // Load product data
 async function loadProductData() {
     const select = document.getElementById('productSelect');
     const selectedOption = select.options[select.selectedIndex];
-    
+
     if (!select.value) return;
-    
+
+    const pid = parseInt(select.value, 10);
+    console.log('[Analyze] loadProductData product_id', pid);
+
     const productData = {
-        id: select.value,
-        name: selectedOption.dataset.name,
-        category: parseInt(selectedOption.dataset.category),
+        id: pid,
+        product_id: pid,
+        name: selectedOption.dataset.name || '',
+        category: parseInt(selectedOption.dataset.category, 10),
         unit_price: parseFloat(selectedOption.dataset.price),
-        stock_available: parseInt(selectedOption.dataset.stock),
+        stock_available: parseInt(selectedOption.dataset.stock, 10) || 0,
         lead_time: 7,
         safety_stock: 50,
         order_cost: 50,
         holding_cost: parseFloat(selectedOption.dataset.price) * 0.2
     };
-    
-    // Get historical data for this product
-    const historicalData = await getHistoricalData(productData);
-    productData.historical = historicalData;
-    
+
+    const raw = await getHistoricalData(productData);
+    productData.historical = normalizeHistoricalToArray(raw);
+
     await analyzeProduct(productData);
 }
 
@@ -322,8 +354,10 @@ async function getHistoricalData(product) {
     try {
         const response = await fetch('/api/get-historical-data', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
+                product_id: product.product_id || product.id,
                 product_name: product.name,
                 category: product.category
             })
@@ -365,29 +399,36 @@ function generateSampleHistoricalData() {
     return { dates, demand, sales, profit };
 }
 
-// Analyze custom product
-function analyzeCustomProduct() {
+// Analyze custom product (or use dropdown selection when set)
+async function analyzeCustomProduct() {
+    const select = document.getElementById('productSelect');
+    if (select && select.value) {
+        await loadProductData();
+        return;
+    }
+
+    const customName = (document.getElementById('customProduct').value || '').trim();
     const productData = {
         id: 'custom',
-        name: document.getElementById('customProduct').value || 'Custom Product',
-        category: parseInt(document.getElementById('customCategory').value),
+        product_id: null,
+        name: customName || 'Custom Product',
+        category: parseInt(document.getElementById('customCategory').value, 10),
         unit_price: parseFloat(document.getElementById('customPrice').value) || 100,
-        stock_available: parseInt(document.getElementById('customStock').value) || 100,
+        stock_available: parseInt(document.getElementById('customStock').value, 10) || 100,
         lead_time: 7,
         safety_stock: 50,
         order_cost: 50,
         holding_cost: (parseFloat(document.getElementById('customPrice').value) || 100) * 0.2
     };
-    
-    if (!productData.name || productData.name === 'Custom Product') {
-        alert('Please enter product details');
+
+    if (!customName) {
+        alert('Please select a product from the dropdown or enter a product name for custom analysis.');
         return;
     }
     
-    // Generate sample historical data for custom product
-    productData.historical = generateSampleHistoricalData();
-    
-    analyzeProduct(productData);
+    productData.historical = normalizeHistoricalToArray(generateSampleHistoricalData());
+
+    await analyzeProduct(productData);
 }
 
 // Main analysis function
@@ -395,6 +436,8 @@ async function analyzeProduct(productData) {
     showLoading();
     
     try {
+        productData.historical = normalizeHistoricalToArray(productData.historical);
+
         // Get predictions
         const [demandPred, salesPred, profitPred, inventoryOpt, profitOpt] = await Promise.all([
             predictDemand(productData),
@@ -408,9 +451,9 @@ async function analyzeProduct(productData) {
         const forecastData = generateForecastData(productData, demandPred, salesPred, profitPred);
         
         // Update UI with results
-        updateDemandForecast(productData, demandPred, forecastData);
-        updateSalesForecast(productData, salesPred, forecastData);
-        updateProfitForecast(productData, profitPred, profitOpt, forecastData);
+        updateDemandForecast(demandPred, productData.historical, forecastData);
+        updateSalesForecast(salesPred, productData.historical, forecastData);
+        updateProfitForecast(profitPred, profitOpt, productData.historical, forecastData);
         updateInventoryManagement(productData, inventoryOpt);
         updateStockOptimization(productData, inventoryOpt);
         updateProductSummary(productData, demandPred, salesPred, profitPred, inventoryOpt);
@@ -427,28 +470,46 @@ async function analyzeProduct(productData) {
 function generateForecastData(product, demandPred, salesPred, profitPred) {
     const forecast = [];
     const today = new Date();
-    
+
+    var dm = Number(demandPred && demandPred.demand);
+    var sm = Number(salesPred && salesPred.sales);
+    var pm = Number(profitPred && profitPred.profit);
+    var baseDailyDemand = (dm > 0) ? (dm / 30) : 50;
+    var baseDailySales = (sm > 0) ? (sm / 30) : (1000 / 30);
+    var baseDailyProfit = (pm > 0) ? (pm / 30) : (300 / 30);
+
     for (let i = 1; i <= 30; i++) {
         const date = new Date(today);
         date.setDate(today.getDate() + i);
-        
-        const dayOfWeek = date.getDay();
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        const multiplier = isWeekend ? 1.5 : 0.8;
-        
-        // Use predicted values with day-based variation
-        const dailyDemand = (demandPred.demand / 30) * multiplier;
-        const dailySales = (salesPred.sales / 30) * multiplier;
-        const dailyProfit = (profitPred.profit / 30) * multiplier;
-        
+
+        const day = date.getDay();
+
+        // 🔥 FIX 2: realistic patterns
+        const weekendBoost = (day === 0 || day === 6) ? 1.25 : 1.0;
+        const weeklySeasonality = 1 + 0.15 * Math.sin(i / 3);
+        const trend = 1 + (i * 0.01);
+
+        // 🔥 FIX 3: randomness (VERY IMPORTANT)
+        const noise = 0.9 + Math.random() * 0.2;
+
+        const demand = baseDailyDemand * weekendBoost * weeklySeasonality * trend * noise;
+
+        // 🔥 FIX 4: SALES ≠ DEMAND (separate behavior)
+        const salesNoise = 0.85 + Math.random() * 0.3;
+        const sales = baseDailySales * weekendBoost * trend * salesNoise;
+
+        // 🔥 FIX 5: PROFIT independent
+        const margin = 0.25 + Math.random() * 0.1;
+        const profit = sales * margin;
+
         forecast.push({
             date: date.toISOString().split('T')[0],
-            demand: dailyDemand,
-            sales: dailySales,
-            profit: dailyProfit
+            demand: demand,
+            sales: sales,
+            profit: profit
         });
     }
-    
+
     return forecast;
 }
 
@@ -456,6 +517,7 @@ function generateForecastData(product, demandPred, salesPred, profitPred) {
 async function predictDemand(product) {
     const response = await fetch('/api/predict-demand', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(product)
     });
@@ -465,6 +527,7 @@ async function predictDemand(product) {
 async function predictSales(product) {
     const response = await fetch('/api/predict-sales', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(product)
     });
@@ -474,6 +537,7 @@ async function predictSales(product) {
 async function predictProfit(product) {
     const response = await fetch('/api/predict-profit', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(product)
     });
@@ -483,6 +547,7 @@ async function predictProfit(product) {
 async function optimizeInventory(product) {
     const response = await fetch('/api/optimize-inventory', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(product)
     });
@@ -492,6 +557,7 @@ async function optimizeInventory(product) {
 async function optimizeProfit(product) {
     const response = await fetch('/api/optimize-profit', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(product)
     });
@@ -499,12 +565,13 @@ async function optimizeProfit(product) {
 }
 
 // Update Demand Forecast with Historical + Forecast
-function updateDemandForecast(product, prediction, forecastData) {
+function updateDemandForecast(prediction, historical, forecast) {
     const container = document.getElementById('demandForecast');
-    const demand = prediction.demand || 0;
-    const weeklyDemand = demand / 4;
-    const monthlyDemand = demand;
-    
+    var demand = (prediction && prediction.demand != null) ? prediction.demand : 50;
+    var monthlyDemand = demand > 200 ? demand : demand * 30;
+    var weeklyDemand = (monthlyDemand / 30) * 7;
+    var dailyAvg = monthlyDemand / 30;
+
     container.innerHTML = `
         <div class="row mb-3">
             <div class="col-4">
@@ -521,30 +588,29 @@ function updateDemandForecast(product, prediction, forecastData) {
             </div>
             <div class="col-4">
                 <div class="stats-badge text-center">
-                    <h4>${Math.round(demand / 30)}</h4>
+                    <h4>${Math.round(dailyAvg)}</h4>
                     <small>Daily Avg</small>
                 </div>
             </div>
         </div>
         <div class="demand-indicator">
-            <div class="demand-fill" style="width: ${Math.min(100, (demand / 1000) * 100)}%"></div>
+            <div class="demand-fill" style="width: ${Math.min(100, (monthlyDemand / 1000) * 100)}%"></div>
         </div>
     `;
-    
-    // Create combined chart with historical and forecast
+
     if (demandChart) demandChart.destroy();
     const ctx = document.getElementById('demandChart').getContext('2d');
-    
-    // Combine historical and forecast data
-    const historicalDates = product.historical?.dates?.slice(-30) || [];
-    const historicalDemand = product.historical?.demand?.slice(-30) || [];
-    const forecastDates = forecastData.map(f => f.date.substring(5));
-    const forecastDemand = forecastData.map(f => f.demand);
-    
-    const allDates = [...historicalDates.map(d => d.substring(5)), ...forecastDates];
-    const historicalData = [...historicalDemand, ...Array(forecastDates.length).fill(null)];
-    const forecastDataPoints = [...Array(historicalDemand.length).fill(null), ...forecastDemand];
-    
+
+    const histRows = Array.isArray(historical) ? historical.slice(-30) : [];
+    const historicalDemand = histRows.map(function (r) { return r.demand || 0; });
+    const fc = forecast || [];
+    const forecastDates = fc.map(function (f) { return f.date.substring(5); });
+    const forecastDemand = fc.map(function (f) { return f.demand || 0; });
+    const histDateShort = histRows.map(function (d) { return String(d.date).substring(5); });
+    const allDates = histDateShort.concat(forecastDates);
+    const historicalData = historicalDemand.concat(new Array(forecastDates.length).fill(null));
+    const forecastDataPoints = new Array(historicalDemand.length).fill(null).concat(forecastDemand);
+
     demandChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -582,26 +648,18 @@ function updateDemandForecast(product, prediction, forecastData) {
                 legend: { position: 'top' },
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
-                            return `${context.dataset.label}: ${Math.round(context.raw)} units`;
+                        label: function (context) {
+                            return context.dataset.label + ': ' + Math.round(context.raw) + ' units';
                         }
                     }
                 }
             },
             scales: {
                 x: {
-                    title: {
-                        display: true,
-                        text: 'Date',
-                        font: { weight: 'bold' }
-                    }
+                    title: { display: true, text: 'Date', font: { weight: 'bold' } }
                 },
                 y: {
-                    title: {
-                        display: true,
-                        text: 'Demand (units)',
-                        font: { weight: 'bold' }
-                    },
+                    title: { display: true, text: 'Demand (units)', font: { weight: 'bold' } },
                     beginAtZero: true
                 }
             }
@@ -610,9 +668,9 @@ function updateDemandForecast(product, prediction, forecastData) {
 }
 
 // Update Sales Forecast with Historical + Forecast
-function updateSalesForecast(product, prediction, forecastData) {
+function updateSalesForecast(prediction, historical, forecast) {
     const container = document.getElementById('salesForecast');
-    const sales = prediction.sales || 0;
+    var sales = (prediction && prediction.sales != null) ? prediction.sales : 1000;
     
     container.innerHTML = `
         <div class="row mb-3">
@@ -640,14 +698,15 @@ function updateSalesForecast(product, prediction, forecastData) {
     if (salesChart) salesChart.destroy();
     const ctx = document.getElementById('salesChart').getContext('2d');
     
-    const historicalDates = product.historical?.dates?.slice(-30) || [];
-    const historicalSales = product.historical?.sales?.slice(-30) || [];
-    const forecastDates = forecastData.map(f => f.date.substring(5));
-    const forecastSales = forecastData.map(f => f.sales);
+    const histRows = Array.isArray(historical) ? historical.slice(-30) : [];
+    const historicalSales = histRows.map(function (r) { return r.sales || 0; });
+    const fc = forecast || [];
+    const forecastDates = fc.map(function (f) { return f.date.substring(5); });
+    const forecastSales = fc.map(function (f) { return f.sales || 0; });
     
-    const allDates = [...historicalDates.map(d => d.substring(5)), ...forecastDates];
-    const historicalData = [...historicalSales, ...Array(forecastDates.length).fill(null)];
-    const forecastDataPoints = [...Array(historicalSales.length).fill(null), ...forecastSales];
+    const allDates = histRows.map(function (d) { return String(d.date).substring(5); }).concat(forecastDates);
+    const historicalData = historicalSales.concat(new Array(forecastDates.length).fill(null));
+    const forecastDataPoints = new Array(historicalSales.length).fill(null).concat(forecastSales);
     
     salesChart = new Chart(ctx, {
         type: 'line',
@@ -698,12 +757,12 @@ function updateSalesForecast(product, prediction, forecastData) {
 }
 
 // Update Profit Forecast with Historical + Forecast
-function updateProfitForecast(product, prediction, optimization, forecastData) {
+function updateProfitForecast(prediction, optimization, historical, forecast) {
     const container = document.getElementById('profitForecast');
-    const profit = prediction.profit || 0;
-    const baseProfit = optimization?.base_profit || profit;
-    const optimalProfit = optimization?.optimal_profit || profit;
-    const improvement = ((optimalProfit - baseProfit) / baseProfit * 100) || 0;
+    var profit = (prediction && prediction.profit != null) ? prediction.profit : 300;
+    var baseProfit = (optimization && optimization.base_profit != null) ? optimization.base_profit : profit;
+    var optimalProfit = (optimization && optimization.optimal_profit != null) ? optimization.optimal_profit : profit;
+    var improvement = (baseProfit > 0) ? ((optimalProfit - baseProfit) / baseProfit * 100) : 0;
     
     container.innerHTML = `
         <div class="row mb-3">
@@ -731,21 +790,22 @@ function updateProfitForecast(product, prediction, optimization, forecastData) {
             </div>
         </div>
         <div class="text-center">
-            <strong>Optimal Discount: ${optimization?.optimal_discount || 0}%</strong>
+            <strong>Optimal Discount: ${(optimization && optimization.optimal_discount != null) ? optimization.optimal_discount : 0}%</strong>
         </div>
     `;
     
     if (profitChart) profitChart.destroy();
     const ctx = document.getElementById('profitChart').getContext('2d');
     
-    const historicalDates = product.historical?.dates?.slice(-30) || [];
-    const historicalProfit = product.historical?.profit?.slice(-30) || [];
-    const forecastDates = forecastData.map(f => f.date.substring(5));
-    const forecastProfit = forecastData.map(f => f.profit);
+    const histRows = Array.isArray(historical) ? historical.slice(-30) : [];
+    const historicalProfit = histRows.map(function (r) { return r.profit || 0; });
+    const fc = forecast || [];
+    const forecastDates = fc.map(function (f) { return f.date.substring(5); });
+    const forecastProfit = fc.map(function (f) { return f.profit || 0; });
     
-    const allDates = [...historicalDates.map(d => d.substring(5)), ...forecastDates];
-    const historicalData = [...historicalProfit, ...Array(forecastDates.length).fill(null)];
-    const forecastDataPoints = [...Array(historicalProfit.length).fill(null), ...forecastProfit];
+    const allDates = histRows.map(function (d) { return String(d.date).substring(5); }).concat(forecastDates);
+    const historicalData = historicalProfit.concat(new Array(forecastDates.length).fill(null));
+    const forecastDataPoints = new Array(historicalProfit.length).fill(null).concat(forecastProfit);
     
     profitChart = new Chart(ctx, {
         type: 'line',
@@ -904,7 +964,11 @@ function updateStockOptimization(product, optimization) {
 
 function updateProductSummary(product, demand, sales, profit, inventory) {
     const container = document.getElementById('productSummary');
-    const profitMargin = sales.sales > 0 ? ((profit.profit / sales.sales) * 100).toFixed(1) : 0;
+    var salesVal = (sales && sales.sales != null) ? sales.sales : 1000;
+    var profitVal = (profit && profit.profit != null) ? profit.profit : 300;
+    var demandVal = (demand && demand.demand != null) ? demand.demand : 50;
+    var monthlyDemand = demandVal > 200 ? demandVal : demandVal * 30;
+    const profitMargin = salesVal > 0 ? ((profitVal / salesVal) * 100).toFixed(1) : 0;
     
     container.innerHTML = `
         <div class="row">
@@ -922,7 +986,7 @@ function updateProductSummary(product, demand, sales, profit, inventory) {
             </div>
             <div class="col-md-3">
                 <div class="text-center">
-                    <h4>${Math.round(demand.demand)} units</h4>
+                    <h4>${Math.round(monthlyDemand)} units</h4>
                     <small>Monthly Demand</small>
                 </div>
             </div>

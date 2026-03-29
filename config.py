@@ -17,6 +17,10 @@ class Config:
     SALES_MODEL_PATH = MODELS_DIR / 'sales_model.pkl'
     DEMAND_MODEL_PATH = MODELS_DIR / 'demand_model.pkl'
     PROFIT_MODEL_PATH = MODELS_DIR / 'profit_model.pkl'
+    DEMAND_FEATURE_NAMES_PATH = MODELS_DIR / 'demand_feature_names.pkl'
+    SALES_FEATURE_NAMES_PATH = MODELS_DIR / 'sales_feature_names.pkl'
+    PROFIT_FEATURE_NAMES_PATH = MODELS_DIR / 'profit_feature_names.pkl'
+    FORECAST_TRAIN_META_PATH = MODELS_DIR / 'forecast_train_meta.pkl'
     
     # ML parameters
     RANDOM_STATE = 42
@@ -34,9 +38,15 @@ class Config:
         'lag_1_day_sales', 'lag_7_day_sales', 'rolling_7d_avg_sales'
     ]
     
-    TARGET_SALES = 'revenue'
-    TARGET_DEMAND = 'quantity'
+    TARGET_SALES = 'sales'
+    TARGET_DEMAND = 'demand'
     TARGET_PROFIT = 'profit'
+
+    # Features used only by the demand model (daily store-level series + calendar)
+    DEMAND_FEATURES = [
+        'lag_1', 'lag_7', 'rolling_mean_7',
+        'day_of_week', 'month', 'is_festival',
+    ]
     
     @staticmethod
     def ensure_directories():

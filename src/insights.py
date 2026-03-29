@@ -38,6 +38,9 @@ def get_demand_trend(df, models, forecast_days=30):
 
 def get_inventory_intelligence(df, models):
     """Return per-product inventory recommendations."""
+    REORDER_LEAD_DAYS = 7
+    SAFETY_STOCK_UNITS = 30
+
     result = generate_forecast(df, days=30)
     avg_daily_demand = float(np.mean(result['demand_forecast'])) if result['demand_forecast'] else 0.0
     products = df['product'].unique() if 'product' in df.columns else ['All Products']
@@ -45,12 +48,12 @@ def get_inventory_intelligence(df, models):
     for product in products[:25]:
         pdf = df[df['product'] == product] if 'product' in df.columns else df
         stock = int(pdf['stock_available'].mean()) if 'stock_available' in pdf.columns else 100
-        daily_demand = avg_daily_demand / max(len(products), 1)
-        reorder_point = round(daily_demand * 7 + 30)
+        mean_daily = avg_daily_demand / max(len(products), 1)
+        reorder_point = round(mean_daily * REORDER_LEAD_DAYS + SAFETY_STOCK_UNITS)
         rows.append({
             'product': product,
             'current_stock': stock,
-            'daily_demand_forecast': round(daily_demand, 1),
+            'daily_demand_forecast': round(mean_daily, 1),
             'reorder_point': reorder_point,
             'status': 'critical' if stock < reorder_point * 0.5 else 'low' if stock < reorder_point else 'ok',
             'recommended_order': max(0, round(reorder_point * 2 - stock)),
