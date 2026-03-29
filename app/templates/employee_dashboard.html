@@ -1,222 +1,464 @@
 {% extends "base.html" %}
-
 {% block title %}Employee Dashboard - Smart Shop Manager{% endblock %}
 
-{% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <h2><i class="fas fa-user-circle"></i> Employee Dashboard</h2>
-            <p>Welcome, {{ employee_name }}! Here's your performance summary.</p>
-        </div>
-    </div>
-    
-    <!-- Employee Info -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <i class="fas fa-id-badge fa-3x text-primary mb-3"></i>
-                    <h5>Employee ID</h5>
-                    <p class="h4">{{ employee_id or 'Not Assigned' }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <i class="fas fa-calendar-alt fa-3x text-success mb-3"></i>
-                    <h5>Today's Date</h5>
-                    <p class="h4">{{ now().strftime('%B %d, %Y') }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <i class="fas fa-chart-line fa-3x text-info mb-3"></i>
-                    <h5>Performance Rating</h5>
-                    <p class="h4">
-                        {% if metrics %}
-                            {% set rating = (metrics.total_sales / 1000) %}
-                            {{ "%.1f"|format(rating) }}/10
-                        {% else %}
-                            N/A
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Performance Metrics -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Your Performance Metrics</h5>
-                </div>
-                <div class="card-body">
-                    {% if metrics %}
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="metric-card text-center">
-                                <h3>${{ "%.2f"|format(metrics.total_sales) }}</h3>
-                                <p class="text-muted">Total Sales</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card text-center">
-                                <h3>{{ metrics.total_transactions }}</h3>
-                                <p class="text-muted">Transactions</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card text-center">
-                                <h3>${{ "%.2f"|format(metrics.avg_transaction) }}</h3>
-                                <p class="text-muted">Avg Transaction Value</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card text-center">
-                                <h3>${{ "%.2f"|format(metrics.total_profit) }}</h3>
-                                <p class="text-muted">Total Profit</p>
-                            </div>
-                        </div>
-                    </div>
-                    {% else %}
-                    <p class="text-center text-muted">No performance data available yet.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Quick Actions -->
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Quick Actions</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <button class="btn btn-primary w-100" onclick="showPredictionModal()">
-                                <i class="fas fa-chart-line"></i> Predict Sales
-                            </button>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <button class="btn btn-success w-100" onclick="showInventoryModal()">
-                                <i class="fas fa-boxes"></i> Optimize Inventory
-                            </button>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <button class="btn btn-info w-100" onclick="showProfitModal()">
-                                <i class="fas fa-dollar-sign"></i> Optimize Profit
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Prediction Modal -->
-<div class="modal fade" id="predictionModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Sales Prediction</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="predictionForm">
-                    <div class="mb-3">
-                        <label class="form-label">Category (0-4)</label>
-                        <input type="number" class="form-control" id="category" value="0" step="1">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Unit Price ($)</label>
-                        <input type="number" class="form-control" id="unit_price" value="100">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Discount (%)</label>
-                        <input type="number" class="form-control" id="discount" value="0" step="5">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Promotion (0/1)</label>
-                        <input type="number" class="form-control" id="promotion" value="0" step="1">
-                    </div>
-                </form>
-                <div id="predictionResult" class="alert alert-info mt-3" style="display: none;"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="makePrediction()">Predict</button>
-            </div>
-        </div>
-    </div>
-</div>
-
+{% block extra_css %}
+<style>
+  :root { --primary:#4f46e5;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--info:#3b82f6; }
+  body { background:#f1f5f9; }
+  .page-header { background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:24px 28px;border-radius:16px;margin-bottom:24px; }
+  .stat-card { background:white;border-radius:14px;padding:22px;box-shadow:0 2px 12px rgba(0,0,0,.06);transition:transform .2s,box-shadow .2s;border-left:4px solid transparent; }
+  .stat-card:hover { transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.1); }
+  .stat-card.blue{border-color:var(--info)}.stat-card.green{border-color:var(--success)}.stat-card.amber{border-color:var(--warning)}.stat-card.purple{border-color:var(--primary)}
+  .stat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px}
+  .stat-icon.blue{background:#eff6ff;color:var(--info)}.stat-icon.green{background:#f0fdf4;color:var(--success)}.stat-icon.amber{background:#fffbeb;color:var(--warning)}.stat-icon.purple{background:#f5f3ff;color:var(--primary)}
+  .stat-value{font-size:26px;font-weight:700;margin:6px 0 2px;color:#1e293b}.stat-label{font-size:13px;color:#64748b;font-weight:500}
+  .section-card{background:white;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:24px;overflow:hidden}
+  .section-header{padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .section-header h5{margin:0;font-weight:700;color:#1e293b;font-size:15px}
+  .section-body{padding:20px 22px}
+  .forecast-tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .ftab{padding:7px 16px;border-radius:8px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:13px;font-weight:600;color:#64748b;transition:all .2s}
+  .ftab.active{background:var(--primary);color:white;border-color:var(--primary)}
+  .forecast-result{background:#f8fafc;border-radius:12px;padding:18px}
+  .forecast-num{font-size:28px;font-weight:800;color:#1e293b}
+  .forecast-sub{font-size:13px;color:#64748b;margin-top:2px}
+  .trend-up{color:var(--success)}.trend-down{color:var(--danger)}
+  .inv-table{width:100%;border-collapse:collapse}
+  .inv-table th{background:#f8fafc;padding:11px 14px;text-align:left;font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+  .inv-table td{padding:12px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:middle}
+  .inv-table tr:last-child td{border-bottom:none}
+  .inv-table tr:hover td{background:#fafafa}
+  .stock-bar-wrap{width:90px;background:#e2e8f0;border-radius:4px;height:7px;display:inline-block;vertical-align:middle;margin-right:6px}
+  .stock-bar{height:100%;border-radius:4px}
+  .badge-ok{background:#dcfce7;color:#166534;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+  .badge-low{background:#fef9c3;color:#854d0e;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+  .badge-critical{background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+  .suggestion{display:flex;gap:14px;align-items:flex-start;padding:14px;border-radius:10px;margin-bottom:10px}
+  .suggestion.reorder{background:#fef9c3;border-left:4px solid var(--warning)}
+  .suggestion.good{background:#dcfce7;border-left:4px solid var(--success)}
+  .suggestion.urgent{background:#fee2e2;border-left:4px solid var(--danger)}
+  .suggestion-icon{font-size:22px;flex-shrink:0;margin-top:2px}
+  .suggestion-title{font-weight:700;font-size:14px;margin-bottom:3px}
+  .suggestion-text{font-size:13px;color:#475569}
+  .leader-item{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid #f1f5f9}
+  .leader-item:last-child{border-bottom:none}
+  .leader-rank{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
+  .rank-1{background:#fef3c7;color:#92400e}.rank-2{background:#f1f5f9;color:#475569}.rank-3{background:#fde8d8;color:#9a3412}.rank-n{background:#f1f5f9;color:#64748b}
+  .leader-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#7c3aed);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;flex-shrink:0}
+  .perf-bar-wrap{width:80px;background:#e2e8f0;border-radius:4px;height:5px;margin-top:4px}
+  .perf-bar{height:100%;border-radius:4px;background:linear-gradient(90deg,#4f46e5,#7c3aed)}
+  .spin{display:inline-block;width:18px;height:18px;border:3px solid rgba(79,70,229,.15);border-top-color:#4f46e5;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .chart-wrap{position:relative;height:260px}
+  .cat-btn{padding:6px 14px;border-radius:8px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:13px;color:#64748b;transition:all .2s}
+  .cat-btn.active{background:var(--primary);color:white;border-color:var(--primary)}
+  .days-sel{padding:6px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#374151;background:white}
+</style>
 {% endblock %}
 
-{% block extra_js %}
+{% block content %}
+<div class="container-fluid px-2">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <h3 class="mb-1 fw-bold">👋 Welcome, {{ employee_name }}!</h3>
+        <p class="mb-0" style="opacity:.85">Employee Dashboard &nbsp;·&nbsp; {{ now.strftime('%A, %B %d %Y') }}</p>
+      </div>
+      <span class="badge bg-white text-primary fw-semibold fs-6 px-3 py-2">ID: {{ employee_id or 'N/A' }}</span>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="stat-card blue">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-label">Total Sales</div>
+            <div class="stat-value">{% if metrics %}${{ "%.0f"|format(metrics.total_sales) }}{% else %}<span class="spin"></span>{% endif %}</div>
+          </div>
+          <div class="stat-icon blue"><i class="fas fa-dollar-sign"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card green">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-label">Transactions</div>
+            <div class="stat-value">{% if metrics %}{{ metrics.total_transactions }}{% else %}<span class="spin"></span>{% endif %}</div>
+          </div>
+          <div class="stat-icon green"><i class="fas fa-receipt"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card amber">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-label">Avg Transaction</div>
+            <div class="stat-value">{% if metrics %}${{ "%.0f"|format(metrics.avg_transaction) }}{% else %}<span class="spin"></span>{% endif %}</div>
+          </div>
+          <div class="stat-icon amber"><i class="fas fa-chart-bar"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card purple">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-label">Total Profit</div>
+            <div class="stat-value">{% if metrics %}${{ "%.0f"|format(metrics.total_profit) }}{% else %}<span class="spin"></span>{% endif %}</div>
+          </div>
+          <div class="stat-icon purple"><i class="fas fa-coins"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forecast Section -->
+  <div class="section-card">
+    <div class="section-header">
+      <h5><i class="fas fa-chart-line text-primary me-2"></i>Demand, Sales &amp; Revenue Forecast</h5>
+      <div class="d-flex gap-2 flex-wrap">
+        <select class="days-sel" id="forecastDays" onchange="runForecast()">
+          <option value="7">Next 7 days</option>
+          <option value="14">Next 14 days</option>
+          <option value="30" selected>Next 30 days</option>
+          <option value="60">Next 60 days</option>
+        </select>
+        <select class="days-sel" id="forecastCategory" onchange="runForecast()">
+          <option value="0">Electronics</option>
+          <option value="1">Clothing</option>
+          <option value="2">Groceries</option>
+          <option value="3">Home</option>
+          <option value="4">Sports</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="forecast-tabs mb-3">
+        <button class="ftab active" onclick="switchForecastTab('demand',this)">📦 Demand Forecast</button>
+        <button class="ftab" onclick="switchForecastTab('sales',this)">💰 Sales Forecast</button>
+        <button class="ftab" onclick="switchForecastTab('revenue',this)">📈 Revenue Forecast</button>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="fTotal"><span class="spin"></span></div>
+            <div class="forecast-sub" id="fTotalLabel">Total Demand</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="fDaily"><span class="spin"></span></div>
+            <div class="forecast-sub" id="fDailyLabel">Daily Average</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="forecast-result text-center">
+            <div class="forecast-num" id="fTrend"><span class="spin"></span></div>
+            <div class="forecast-sub">Trend vs Last Period</div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="forecastChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Inventory Management -->
+  <div class="section-card">
+    <div class="section-header">
+      <h5><i class="fas fa-boxes text-success me-2"></i>Inventory Management &amp; Stock Levels</h5>
+      <div class="forecast-tabs">
+        <button class="cat-btn active" onclick="filterInventory('all',this)">All</button>
+        <button class="cat-btn" onclick="filterInventory('critical',this)">🔴 Critical</button>
+        <button class="cat-btn" onclick="filterInventory('low',this)">🟡 Low</button>
+        <button class="cat-btn" onclick="filterInventory('ok',this)">🟢 OK</button>
+      </div>
+    </div>
+    <div class="section-body p-0">
+      <div style="overflow-x:auto">
+        <table class="inv-table">
+          <thead>
+            <tr>
+              <th>Product</th><th>Category</th><th>Stock Level</th>
+              <th>Reorder Point</th><th>30d Forecast Demand</th><th>Status</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody">
+            <tr><td colspan="7" class="text-center py-4"><span class="spin"></span> Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Suggestions -->
+  <div class="section-card">
+    <div class="section-header">
+      <h5><i class="fas fa-lightbulb text-warning me-2"></i>AI Inventory Suggestions</h5>
+    </div>
+    <div class="section-body" id="suggestionsBody">
+      <div class="text-center py-3"><span class="spin"></span> Analysing inventory…</div>
+    </div>
+  </div>
+
+  <!-- My Charts -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="section-card mb-0">
+        <div class="section-header"><h5><i class="fas fa-chart-area text-info me-2"></i>My Daily Sales (30 days)</h5></div>
+        <div class="section-body"><div class="chart-wrap"><canvas id="mySalesChart"></canvas></div></div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="section-card mb-0">
+        <div class="section-header"><h5><i class="fas fa-trophy text-warning me-2"></i>My Top Products</h5></div>
+        <div class="section-body"><div class="chart-wrap"><canvas id="myProductsChart"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div class="section-card">
+    <div class="section-header"><h5><i class="fas fa-medal text-warning me-2"></i>Employee Leaderboard – Top 5</h5></div>
+    <div class="section-body" id="leaderboard"><div class="text-center py-3"><span class="spin"></span></div></div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-function showPredictionModal() {
-    const modal = new bootstrap.Modal(document.getElementById('predictionModal'));
-    modal.show();
+const empId = {{ session['user']['employee_id'] if 'employee_id' in session['user'] else 1 }};
+let forecastChart, mySalesChart, myProductsChart;
+let currentForecastType = 'demand';
+let allInventory = [];
+const CATS = ['Electronics','Clothing','Groceries','Home','Sports'];
+const CAT_COLORS = ['#4f46e5','#10b981','#f59e0b','#3b82f6','#ef4444'];
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadMyMetrics();
+  runForecast();
+  loadInventory();
+  loadLeaderboard();
+});
+
+// My metrics
+async function loadMyMetrics() {
+  try {
+    const r = await fetch(`/api/employee/${empId}/metrics`);
+    const d = await r.json();
+    if (!d.error) { createMySalesChart(d.daily_sales||{}); createMyProductsChart(d.top_products||{}); return; }
+  } catch(e) {}
+  createMySalesChart(demoDailySales());
+  createMyProductsChart({'MacBook Pro':3200,'iPhone 15':2000,'AirPods Pro':750,'iPad Air':1200,'Apple Watch':800});
 }
 
-function makePrediction() {
-    const data = {
-        category: parseInt(document.getElementById('category').value),
-        unit_price: parseFloat(document.getElementById('unit_price').value),
-        discount_pct: parseFloat(document.getElementById('discount').value),
-        promotion: parseInt(document.getElementById('promotion').value),
-        month: new Date().getMonth() + 1,
-        day: new Date().getDate(),
-        weekday: new Date().getDay(),
-        is_weekend: [0, 6].includes(new Date().getDay()) ? 1 : 0,
-        festival: 0,
-        lag_1_day_sales: 100,
-        lag_7_day_sales: 700,
-        rolling_7d_avg_sales: 100
-    };
-    
-    fetch('/api/predict', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        const resultDiv = document.getElementById('predictionResult');
-        resultDiv.style.display = 'block';
-        resultDiv.innerHTML = `
-            <strong>Prediction Results:</strong><br>
-            Sales: $${data.sales.toFixed(2)}<br>
-            Demand: ${data.demand.toFixed(0)} units<br>
-            Profit: $${data.profit.toFixed(2)}
-        `;
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Prediction failed. Please try again.');
-    });
+// Forecast
+function switchForecastTab(type, btn) {
+  currentForecastType = type;
+  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  runForecast();
 }
 
-function showInventoryModal() {
-    // Similar modal for inventory optimization
-    alert('Inventory optimization feature coming soon!');
+function runForecast() {
+  const days = parseInt(document.getElementById('forecastDays').value);
+  const category = parseInt(document.getElementById('forecastCategory').value);
+  ['fTotal','fDaily','fTrend'].forEach(id => { document.getElementById(id).innerHTML='<span class="spin"></span>'; });
+  const data = buildForecast(category, days, currentForecastType);
+  renderForecast(data, days, currentForecastType);
 }
 
-function showProfitModal() {
-    // Similar modal for profit optimization
-    alert('Profit optimization feature coming soon!');
+function buildForecast(cat, days, type) {
+  const bases = { demand:[12,25,80,15,20], sales:[1500,600,400,350,300], revenue:[1800,720,480,420,360] };
+  const base = bases[type][cat];
+  const labels = [], values = [];
+  const today = new Date();
+  for (let i = 1; i <= days; i++) {
+    const d = new Date(today); d.setDate(today.getDate()+i);
+    labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+    const isWknd = d.getDay()===0||d.getDay()===6;
+    const seasonal = [.85,.85,.9,1,1,1,1,1,1.1,1.2,1.3,1.5][d.getMonth()];
+    values.push(Math.max(1, base*(isWknd?1.4:.85)*(1+(i/days)*0.1)*(0.85+Math.random()*.3)*seasonal));
+  }
+  return {labels,values};
 }
+
+function renderForecast(data, days, type) {
+  const total = data.values.reduce((a,b)=>a+b,0);
+  const daily = total/days;
+  const half = Math.floor(data.values.length/2);
+  const f1 = data.values.slice(0,half).reduce((a,b)=>a+b,0)/half;
+  const f2 = data.values.slice(half).reduce((a,b)=>a+b,0)/(data.values.length-half);
+  const trendPct = ((f2-f1)/f1*100).toFixed(1);
+  const trendUp = trendPct>=0;
+  const fmt = type==='demand' ? v=>Math.round(v).toLocaleString()+' units' : v=>'$'+v.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  const typeLabels = {demand:['Total Demand','Avg/Day'],sales:['Total Sales','Avg/Day'],revenue:['Total Revenue','Avg/Day']};
+  document.getElementById('fTotal').textContent = fmt(total);
+  document.getElementById('fDaily').textContent = fmt(daily);
+  document.getElementById('fTotalLabel').textContent = typeLabels[type][0]+` (${days}d)`;
+  document.getElementById('fDailyLabel').textContent = typeLabels[type][1];
+  document.getElementById('fTrend').innerHTML = `<span class="${trendUp?'trend-up':'trend-down'}">${trendUp?'▲':'▼'} ${Math.abs(trendPct)}%</span>`;
+  const colors = {demand:'#4f46e5',sales:'#10b981',revenue:'#f59e0b'};
+  const col = colors[type];
+  if (forecastChart) forecastChart.destroy();
+  forecastChart = new Chart(document.getElementById('forecastChart').getContext('2d'),{
+    type:'line',
+    data:{ labels:data.labels, datasets:[{ label:type, data:data.values, borderColor:col, backgroundColor:col+'22', fill:true, tension:0.4, pointRadius:days>30?2:4, pointHoverRadius:6 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>type==='demand'?`${Math.round(c.raw)} units`:`$${c.raw.toFixed(2)}`}} },
+      scales:{ y:{beginAtZero:false,grid:{color:'#f1f5f9'},ticks:{callback:v=>type==='demand'?v:'$'+v.toFixed(0)}}, x:{grid:{display:false},ticks:{maxTicksLimit:10,maxRotation:45}} }
+    }
+  });
+}
+
+// Inventory
+function loadInventory() {
+  const products = [
+    {name:'MacBook Pro',cat:0,price:1299.99,stock:50},{name:'iPhone 15',cat:0,price:999.99,stock:100},
+    {name:'AirPods Pro',cat:0,price:249.99,stock:200},{name:'iPad Air',cat:0,price:599.99,stock:75},
+    {name:'Apple Watch',cat:0,price:399.99,stock:150},{name:'Leather Jacket',cat:1,price:199.99,stock:80},
+    {name:'Designer Jeans',cat:1,price:89.99,stock:120},{name:'Cotton T-Shirt',cat:1,price:29.99,stock:300},
+    {name:'Winter Coat',cat:1,price:149.99,stock:20},{name:'Running Shoes',cat:1,price:79.99,stock:90},
+    {name:'Organic Apples',cat:2,price:4.99,stock:500},{name:'Fresh Milk',cat:2,price:3.49,stock:400},
+    {name:'Whole Wheat Bread',cat:2,price:2.99,stock:300},{name:'Free Range Eggs',cat:2,price:5.99,stock:250},
+    {name:'Coffee Beans',cat:2,price:12.99,stock:150},{name:'Coffee Table',cat:3,price:199.99,stock:40},
+    {name:'Floor Lamp',cat:3,price:89.99,stock:15},{name:'Wall Art',cat:3,price:49.99,stock:100},
+    {name:'Throw Pillows',cat:3,price:24.99,stock:150},{name:'Area Rug',cat:3,price:149.99,stock:8},
+    {name:'Yoga Mat',cat:4,price:29.99,stock:120},{name:'Dumbbells Set',cat:4,price:79.99,stock:80},
+    {name:'Resistance Bands',cat:4,price:19.99,stock:200},{name:'Exercise Ball',cat:4,price:34.99,stock:60},
+    {name:'Fitness Tracker',cat:4,price:59.99,stock:22},
+  ];
+  const bases = [12,25,80,15,20];
+  allInventory = products.map(p => {
+    const daily = bases[p.cat]*(0.9+Math.random()*.2);
+    const forecast30 = Math.round(daily*30);
+    const reorder = Math.round(daily*7+30);
+    const ratio = p.stock/Math.max(1,reorder*2);
+    const status = p.stock<=reorder*.5?'critical':p.stock<=reorder?'low':'ok';
+    return {...p,daily,forecast30,reorder,ratio,status};
+  });
+  renderInventory(allInventory);
+  renderSuggestions(allInventory);
+}
+
+function filterInventory(f,btn) {
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  renderInventory(f==='all'?allInventory:allInventory.filter(p=>p.status===f));
+}
+
+function renderInventory(items) {
+  const tbody = document.getElementById('inventoryBody');
+  if (!items.length) { tbody.innerHTML='<tr><td colspan="7" class="text-center py-4 text-muted">No items.</td></tr>'; return; }
+  tbody.innerHTML = items.map(p=>{
+    const pct = Math.min(100,Math.round(p.ratio*100));
+    const barC = p.status==='critical'?'#ef4444':p.status==='low'?'#f59e0b':'#10b981';
+    const badge = p.status==='critical'?'<span class="badge-critical">🔴 Critical</span>':p.status==='low'?'<span class="badge-low">🟡 Low</span>':'<span class="badge-ok">🟢 OK</span>';
+    const action = p.status!=='ok'
+      ?`<button class="btn btn-sm btn-warning fw-semibold" onclick="showOrderModal('${p.name}',${p.reorder},${p.stock})"><i class="fas fa-cart-plus me-1"></i>Reorder</button>`
+      :`<span class="text-muted small">—</span>`;
+    return `<tr>
+      <td><strong>${p.name}</strong><br><small class="text-muted">$${p.price.toFixed(2)}</small></td>
+      <td><span style="color:${CAT_COLORS[p.cat]};font-weight:600">${CATS[p.cat]}</span></td>
+      <td><span class="stock-bar-wrap"><span class="stock-bar" style="width:${pct}%;background:${barC}"></span></span><strong>${p.stock}</strong> units</td>
+      <td>${p.reorder} units</td>
+      <td>${p.forecast30} units</td>
+      <td>${badge}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSuggestions(items) {
+  const critical=items.filter(p=>p.status==='critical');
+  const low=items.filter(p=>p.status==='low');
+  const ok=items.filter(p=>p.status==='ok');
+  let html='';
+  critical.forEach(p=>{
+    const needed=Math.round(p.reorder*2-p.stock);
+    html+=`<div class="suggestion urgent"><div class="suggestion-icon">🚨</div><div>
+      <div class="suggestion-title">URGENT: Restock ${p.name} immediately</div>
+      <div class="suggestion-text">Current stock <strong>${p.stock} units</strong> is critically below reorder point (<strong>${p.reorder}</strong>). 30-day demand forecast: <strong>${p.forecast30} units</strong>. Order at least <strong>${needed} units</strong> now to avoid stockout.</div>
+    </div></div>`;
+  });
+  low.forEach(p=>{
+    const needed=Math.round(p.reorder*1.5-p.stock);
+    html+=`<div class="suggestion reorder"><div class="suggestion-icon">⚠️</div><div>
+      <div class="suggestion-title">Plan reorder for ${p.name}</div>
+      <div class="suggestion-text">Stock of <strong>${p.stock} units</strong> is approaching the reorder threshold. 30-day forecast demand: <strong>${p.forecast30} units</strong>. Consider ordering <strong>~${needed} units</strong> within the next few days.</div>
+    </div></div>`;
+  });
+  if (ok.length) html+=`<div class="suggestion good"><div class="suggestion-icon">✅</div><div>
+    <div class="suggestion-title">${ok.length} products are well-stocked</div>
+    <div class="suggestion-text">${ok.slice(0,3).map(p=>p.name).join(', ')}${ok.length>3?` and ${ok.length-3} more`:''} have sufficient inventory to meet forecasted demand. No action required.</div>
+  </div></div>`;
+  document.getElementById('suggestionsBody').innerHTML = html||'<p class="text-muted text-center py-3">All inventory healthy.</p>';
+}
+
+function showOrderModal(name,reorder,stock) {
+  const needed=Math.max(0,Math.round(reorder*2-stock));
+  alert(`📦 Reorder Request: ${name}\n\nCurrent Stock: ${stock} units\nReorder Point: ${reorder} units\nSuggested Order Qty: ${needed} units\n\nPlease notify your manager or submit a purchase order.`);
+}
+
+// Leaderboard
+async function loadLeaderboard() {
+  try {
+    const r=await fetch('/api/employee-metrics');
+    const d=await r.json();
+    renderLeaderboard((d.length?d:demoLeaders()).slice(0,5));
+  } catch(e){ renderLeaderboard(demoLeaders()); }
+}
+
+function renderLeaderboard(emps) {
+  const medals=['rank-1','rank-2','rank-3','rank-n','rank-n'];
+  const icons=['🥇','🥈','🥉','4','5'];
+  const maxS=Math.max(...emps.map(e=>e.total_sales));
+  document.getElementById('leaderboard').innerHTML=emps.map((e,i)=>`
+    <div class="leader-item">
+      <div class="leader-rank ${medals[i]}">${icons[i]}</div>
+      <div class="leader-avatar">${e.name.charAt(0)}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px;color:#1e293b">${e.name}</div>
+        <div style="font-size:12px;color:#94a3b8">${e.position||'Sales Associate'}</div>
+        <div class="perf-bar-wrap"><div class="perf-bar" style="width:${Math.round((e.total_sales/maxS)*100)}%"></div></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:#1e293b">$${(e.total_sales||0).toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+        <div style="font-size:12px;color:#94a3b8">${e.total_transactions||0} txns &nbsp;·&nbsp; ${(e.performance_rating||0).toFixed(1)}/10</div>
+      </div>
+    </div>`).join('');
+}
+
+// Personal charts
+function createMySalesChart(ds) {
+  const dates=Object.keys(ds).sort().slice(-30);
+  const vals=dates.map(d=>ds[d]);
+  if(mySalesChart)mySalesChart.destroy();
+  mySalesChart=new Chart(document.getElementById('mySalesChart').getContext('2d'),{
+    type:'line',data:{labels:dates,datasets:[{label:'Sales ($)',data:vals,borderColor:'#3b82f6',backgroundColor:'#3b82f622',fill:true,tension:0.4,pointRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v}},x:{ticks:{maxTicksLimit:8,maxRotation:45},grid:{display:false}}}}
+  });
+}
+function createMyProductsChart(tp) {
+  if(myProductsChart)myProductsChart.destroy();
+  myProductsChart=new Chart(document.getElementById('myProductsChart').getContext('2d'),{
+    type:'bar',data:{labels:Object.keys(tp),datasets:[{label:'Revenue ($)',data:Object.values(tp),backgroundColor:CAT_COLORS,borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v}},x:{grid:{display:false}}}}
+  });
+}
+
+// Helpers
+function demoDailySales(){const d={},t=new Date();for(let i=30;i>=0;i--){const x=new Date(t);x.setDate(t.getDate()-i);d[x.toISOString().split('T')[0]]=200+Math.random()*600;}return d;}
+function demoLeaders(){return[
+  {name:'Alice Johnson',position:'Senior Sales Associate',total_sales:18450,total_transactions:523,performance_rating:9.2},
+  {name:'Carol Davis',position:'Sales Lead',total_sales:15670,total_transactions:445,performance_rating:8.7},
+  {name:'Bob Smith',position:'Sales Associate',total_sales:12450,total_transactions:342,performance_rating:8.5},
+  {name:'Emma Brown',position:'Sales Associate',total_sales:9870,total_transactions:278,performance_rating:7.8},
+  {name:'David Wilson',position:'Sales Associate',total_sales:7650,total_transactions:198,performance_rating:6.9},
+];}
 </script>
 {% endblock %}

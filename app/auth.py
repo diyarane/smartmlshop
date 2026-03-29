@@ -1,3 +1,4 @@
+# app/auth.py
 import sys
 import os
 import json
@@ -24,17 +25,35 @@ def init_users():
                 'role': 'manager',
                 'name': 'Store Manager'
             },
-            'employee1': {
+            'alice': {
                 'password': hashlib.sha256('emp123'.encode()).hexdigest(),
                 'role': 'employee',
-                'name': 'John Doe',
-                'employee_id': 'EMP_001'
+                'name': 'Alice Johnson',
+                'employee_id': 1
             },
-            'employee2': {
+            'bob': {
                 'password': hashlib.sha256('emp123'.encode()).hexdigest(),
                 'role': 'employee',
-                'name': 'Jane Smith',
-                'employee_id': 'EMP_002'
+                'name': 'Bob Smith',
+                'employee_id': 2
+            },
+            'carol': {
+                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+                'role': 'employee',
+                'name': 'Carol Davis',
+                'employee_id': 3
+            },
+            'david': {
+                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+                'role': 'employee',
+                'name': 'David Wilson',
+                'employee_id': 4
+            },
+            'emma': {
+                'password': hashlib.sha256('emp123'.encode()).hexdigest(),
+                'role': 'employee',
+                'name': 'Emma Brown',
+                'employee_id': 5
             }
         }
         with open(USERS_FILE, 'w') as f:

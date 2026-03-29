@@ -1,3 +1,4 @@
+# app/app.py (updated version)
 import sys
 import os
 
@@ -19,6 +20,7 @@ from config import Config
 # Import blueprints - using direct imports since we're in the app directory
 from app.auth import auth_bp
 from app.routes import routes_bp
+from app.models import db
 
 # Configure logging
 logging.basicConfig(
@@ -31,9 +33,21 @@ def create_app():
     """Application factory pattern"""
     app = Flask(__name__)
     
+    # Ensure instance folder exists
+    instance_path = os.path.join(parent_dir, 'instance')
+    if not os.path.exists(instance_path):
+        os.makedirs(instance_path)
+    
     # Configuration
     app.config['SECRET_KEY'] = Config.SECRET_KEY
     app.config['DEBUG'] = Config.DEBUG
+    # Use absolute path for database
+    db_path = os.path.join(instance_path, 'shop.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # Initialize extensions
+    db.init_app(app)
     
     # Enable CORS
     CORS(app)
@@ -42,42 +56,21 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(routes_bp, url_prefix='/')
     
+    # Create tables and demo data
+    with app.app_context():
+        try:
+            # Create all tables
+            db.create_all()
+            logger.info("Database tables created successfully")
+            
+            # Import and run demo data creation
+            from app.demo_data import create_demo_data
+            create_demo_data()
+        except Exception as e:
+            logger.error(f"Error setting up database: {e}")
+    
     # Ensure directories exist
     Config.ensure_directories()
-    
-    # Create sample data if needed
-    from src.preprocessing import DataPreprocessor
-    preprocessor = DataPreprocessor()
-    raw_data = preprocessor.load_raw_data()
-    
-    if raw_data is None or raw_data.empty:
-        logger.info("Creating sample data...")
-        raw_data = preprocessor.create_sample_data()
-    
-    # Train models if not exist OR if they're incompatible
-    from src.train_model import ModelTrainer
-    trainer = ModelTrainer()
-    
-    # Check if models exist and are compatible
-    models_exist = (os.path.exists(Config.SALES_MODEL_PATH) and 
-                    os.path.exists(Config.DEMAND_MODEL_PATH) and 
-                    os.path.exists(Config.PROFIT_MODEL_PATH))
-    
-    # If models exist, try to load them to check compatibility
-    if models_exist:
-        try:
-            # Try to load models to check compatibility
-            import joblib
-            test_model = joblib.load(Config.SALES_MODEL_PATH)
-            logger.info("Existing models are compatible")
-        except Exception as e:
-            logger.warning(f"Models incompatible or corrupted: {e}")
-            logger.info("Retraining models...")
-            models_exist = False
-    
-    if not models_exist:
-        logger.info("Training new models...")
-        trainer.train_all_models()
     
     return app
 
