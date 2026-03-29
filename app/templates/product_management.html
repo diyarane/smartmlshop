@@ -1,0 +1,953 @@
+{% extends "base.html" %}
+
+{% block title %}Product Management - Smart Shop Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .forecast-card {
+        transition: transform 0.2s;
+        margin-bottom: 20px;
+    }
+    .forecast-card:hover {
+        transform: translateY(-5px);
+    }
+    .demand-indicator {
+        width: 100%;
+        height: 8px;
+        background: #e0e0e0;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+    .demand-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4caf50, #ff9800);
+        transition: width 0.3s;
+    }
+    .inventory-status {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: bold;
+        display: inline-block;
+    }
+    .status-critical {
+        background: #ff4444;
+        color: white;
+    }
+    .status-low {
+        background: #ff9800;
+        color: white;
+    }
+    .status-optimal {
+        background: #4caf50;
+        color: white;
+    }
+    .status-high {
+        background: #2196f3;
+        color: white;
+    }
+    .profit-badge {
+        font-size: 20px;
+        font-weight: bold;
+    }
+    .trend-up {
+        color: #4caf50;
+    }
+    .trend-down {
+        color: #ff4444;
+    }
+    .action-btn {
+        margin: 5px;
+    }
+    .loading-spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(0,0,0,.1);
+        border-radius: 50%;
+        border-top-color: #007bff;
+        animation: spin 1s ease-in-out infinite;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    .chart-container {
+        position: relative;
+        margin-top: 20px;
+    }
+    .legend-box {
+        display: inline-block;
+        width: 20px;
+        height: 3px;
+        margin-right: 5px;
+        vertical-align: middle;
+    }
+    .legend-solid {
+        background: #4caf50;
+    }
+    .legend-dotted {
+        background: repeating-linear-gradient(90deg, #ff9800, #ff9800 5px, transparent 5px, transparent 10px);
+    }
+    .stats-badge {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 8px;
+        margin: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-boxes"></i> Product Management & Forecasting</h2>
+            <p>Predict demand, optimize inventory, and maximize profits with AI-powered insights</p>
+        </div>
+    </div>
+
+    <!-- Product Selection -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-search"></i> Select Product</h5>
+                </div>
+                <div class="card-body">
+                    <select id="productSelect" class="form-select" onchange="loadProductData()">
+                        <option value="">Select a product...</option>
+                        {% for product in products %}
+                        <option value="{{ product.id }}" data-name="{{ product.name }}" 
+                                data-category="{{ product.category }}" data-price="{{ product.price }}" 
+                                data-stock="{{ product.stock }}" data-history="{{ product.history|tojson }}">
+                            {{ product.name }} - ${{ "%.2f"|format(product.price) }} (Stock: {{ product.stock }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    
+                    <div class="mt-3">
+                        <label class="form-label">Or enter custom product details:</label>
+                        <input type="text" id="customProduct" class="form-control mb-2" placeholder="Product Name">
+                        <input type="number" id="customPrice" class="form-control mb-2" placeholder="Unit Price ($)">
+                        <input type="number" id="customStock" class="form-control mb-2" placeholder="Current Stock">
+                        <select id="customCategory" class="form-control mb-2">
+                            <option value="0">Electronics</option>
+                            <option value="1">Clothing</option>
+                            <option value="2">Groceries</option>
+                            <option value="3">Home</option>
+                            <option value="4">Sports</option>
+                        </select>
+                        <button class="btn btn-primary w-100" onclick="analyzeCustomProduct()">
+                            <i class="fas fa-chart-line"></i> Analyze Product
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-line"></i> Product Performance Summary</h5>
+                </div>
+                <div class="card-body" id="productSummary">
+                    <p class="text-muted text-center">Select a product to see detailed analysis</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Five Core Functionalities with Historical + Forecast Charts -->
+    <div class="row">
+        <!-- 1. Demand Forecast -->
+        <div class="col-md-6 mb-4">
+            <div class="card forecast-card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5><i class="fas fa-chart-bar"></i> 1. Demand Forecast</h5>
+                </div>
+                <div class="card-body">
+                    <div id="demandForecast">
+                        <p class="text-muted">Select a product to see demand forecast</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="demandChart"></canvas>
+                    </div>
+                    <div class="mt-2 text-center">
+                        <span><span class="legend-box legend-solid"></span> Historical Data</span>
+                        <span class="ms-3"><span class="legend-box legend-dotted"></span> Forecast</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Sales Forecast -->
+        <div class="col-md-6 mb-4">
+            <div class="card forecast-card h-100">
+                <div class="card-header bg-success text-white">
+                    <h5><i class="fas fa-dollar-sign"></i> 2. Sales Forecast</h5>
+                </div>
+                <div class="card-body">
+                    <div id="salesForecast">
+                        <p class="text-muted">Select a product to see sales forecast</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="salesChart"></canvas>
+                    </div>
+                    <div class="mt-2 text-center">
+                        <span><span class="legend-box legend-solid"></span> Historical Data</span>
+                        <span class="ms-3"><span class="legend-box legend-dotted"></span> Forecast</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Profit Forecast -->
+        <div class="col-md-6 mb-4">
+            <div class="card forecast-card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h5><i class="fas fa-chart-line"></i> 3. Profit Forecast</h5>
+                </div>
+                <div class="card-body">
+                    <div id="profitForecast">
+                        <p class="text-muted">Select a product to see profit forecast</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="profitChart"></canvas>
+                    </div>
+                    <div class="mt-2 text-center">
+                        <span><span class="legend-box legend-solid"></span> Historical Data</span>
+                        <span class="ms-3"><span class="legend-box legend-dotted"></span> Forecast</span>
+                    </div>
+                    <div id="profitOptimization" class="mt-3" style="display: none;">
+                        <h6>Discount Optimization</h6>
+                        <canvas id="profitOptimizationChart" style="height: 200px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Inventory Management -->
+        <div class="col-md-6 mb-4">
+            <div class="card forecast-card h-100">
+                <div class="card-header bg-info text-white">
+                    <h5><i class="fas fa-boxes"></i> 4. Inventory Management</h5>
+                </div>
+                <div class="card-body">
+                    <div id="inventoryManagement">
+                        <p class="text-muted">Select a product to see inventory recommendations</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="inventoryChart" style="height: 200px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Stock Optimization -->
+        <div class="col-md-12 mb-4">
+            <div class="card forecast-card">
+                <div class="card-header bg-danger text-white">
+                    <h5><i class="fas fa-tachometer-alt"></i> 5. Stock Optimization & Reorder Recommendations</h5>
+                </div>
+                <div class="card-body">
+                    <div id="stockOptimization">
+                        <p class="text-muted">Select a product to see stock optimization recommendations</p>
+                    </div>
+                    <div class="row" id="recommendationDetails" style="display: none;">
+                        <div class="col-md-3">
+                            <div class="alert alert-info">
+                                <strong>Reorder Point</strong><br>
+                                <span id="reorderPoint" class="h4">-</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="alert alert-success">
+                                <strong>Optimal Order Qty</strong><br>
+                                <span id="optimalOrder" class="h4">-</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="alert alert-warning">
+                                <strong>Safety Stock</strong><br>
+                                <span id="safetyStock" class="h4">-</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="alert alert-primary">
+                                <strong>Days Until Stockout</strong><br>
+                                <span id="daysUntilStockout" class="h4">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let demandChart, salesChart, profitChart, inventoryChart, profitOptChart;
+
+// Load product data
+async function loadProductData() {
+    const select = document.getElementById('productSelect');
+    const selectedOption = select.options[select.selectedIndex];
+    
+    if (!select.value) return;
+    
+    const productData = {
+        id: select.value,
+        name: selectedOption.dataset.name,
+        category: parseInt(selectedOption.dataset.category),
+        unit_price: parseFloat(selectedOption.dataset.price),
+        stock_available: parseInt(selectedOption.dataset.stock),
+        lead_time: 7,
+        safety_stock: 50,
+        order_cost: 50,
+        holding_cost: parseFloat(selectedOption.dataset.price) * 0.2
+    };
+    
+    // Get historical data for this product
+    const historicalData = await getHistoricalData(productData);
+    productData.historical = historicalData;
+    
+    await analyzeProduct(productData);
+}
+
+// Get historical data from database
+async function getHistoricalData(product) {
+    try {
+        const response = await fetch('/api/get-historical-data', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                product_name: product.name,
+                category: product.category
+            })
+        });
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching historical data:', error);
+        // Return sample historical data if API fails
+        return generateSampleHistoricalData();
+    }
+}
+
+// Generate sample historical data for demo
+function generateSampleHistoricalData() {
+    const dates = [];
+    const demand = [];
+    const sales = [];
+    const profit = [];
+    
+    // Generate last 60 days of historical data
+    for (let i = 60; i >= 1; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        dates.push(date.toISOString().split('T')[0]);
+        
+        // Create some realistic patterns
+        const dayOfWeek = date.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const multiplier = isWeekend ? 1.5 : 1.0;
+        
+        const baseDemand = 50 + Math.random() * 30;
+        const baseSales = baseDemand * 100 * multiplier;
+        
+        demand.push(baseDemand * multiplier);
+        sales.push(baseSales);
+        profit.push(baseSales * 0.3);
+    }
+    
+    return { dates, demand, sales, profit };
+}
+
+// Analyze custom product
+function analyzeCustomProduct() {
+    const productData = {
+        id: 'custom',
+        name: document.getElementById('customProduct').value || 'Custom Product',
+        category: parseInt(document.getElementById('customCategory').value),
+        unit_price: parseFloat(document.getElementById('customPrice').value) || 100,
+        stock_available: parseInt(document.getElementById('customStock').value) || 100,
+        lead_time: 7,
+        safety_stock: 50,
+        order_cost: 50,
+        holding_cost: (parseFloat(document.getElementById('customPrice').value) || 100) * 0.2
+    };
+    
+    if (!productData.name || productData.name === 'Custom Product') {
+        alert('Please enter product details');
+        return;
+    }
+    
+    // Generate sample historical data for custom product
+    productData.historical = generateSampleHistoricalData();
+    
+    analyzeProduct(productData);
+}
+
+// Main analysis function
+async function analyzeProduct(productData) {
+    showLoading();
+    
+    try {
+        // Get predictions
+        const [demandPred, salesPred, profitPred, inventoryOpt, profitOpt] = await Promise.all([
+            predictDemand(productData),
+            predictSales(productData),
+            predictProfit(productData),
+            optimizeInventory(productData),
+            optimizeProfit(productData)
+        ]);
+        
+        // Generate forecast data
+        const forecastData = generateForecastData(productData, demandPred, salesPred, profitPred);
+        
+        // Update UI with results
+        updateDemandForecast(productData, demandPred, forecastData);
+        updateSalesForecast(productData, salesPred, forecastData);
+        updateProfitForecast(productData, profitPred, profitOpt, forecastData);
+        updateInventoryManagement(productData, inventoryOpt);
+        updateStockOptimization(productData, inventoryOpt);
+        updateProductSummary(productData, demandPred, salesPred, profitPred, inventoryOpt);
+        
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error analyzing product. Please try again.');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Generate forecast data for next 30 days
+function generateForecastData(product, demandPred, salesPred, profitPred) {
+    const forecast = [];
+    const today = new Date();
+    
+    for (let i = 1; i <= 30; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        
+        const dayOfWeek = date.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const multiplier = isWeekend ? 1.5 : 0.8;
+        
+        // Use predicted values with day-based variation
+        const dailyDemand = (demandPred.demand / 30) * multiplier;
+        const dailySales = (salesPred.sales / 30) * multiplier;
+        const dailyProfit = (profitPred.profit / 30) * multiplier;
+        
+        forecast.push({
+            date: date.toISOString().split('T')[0],
+            demand: dailyDemand,
+            sales: dailySales,
+            profit: dailyProfit
+        });
+    }
+    
+    return forecast;
+}
+
+// API Calls
+async function predictDemand(product) {
+    const response = await fetch('/api/predict-demand', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(product)
+    });
+    return await response.json();
+}
+
+async function predictSales(product) {
+    const response = await fetch('/api/predict-sales', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(product)
+    });
+    return await response.json();
+}
+
+async function predictProfit(product) {
+    const response = await fetch('/api/predict-profit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(product)
+    });
+    return await response.json();
+}
+
+async function optimizeInventory(product) {
+    const response = await fetch('/api/optimize-inventory', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(product)
+    });
+    return await response.json();
+}
+
+async function optimizeProfit(product) {
+    const response = await fetch('/api/optimize-profit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(product)
+    });
+    return await response.json();
+}
+
+// Update Demand Forecast with Historical + Forecast
+function updateDemandForecast(product, prediction, forecastData) {
+    const container = document.getElementById('demandForecast');
+    const demand = prediction.demand || 0;
+    const weeklyDemand = demand / 4;
+    const monthlyDemand = demand;
+    
+    container.innerHTML = `
+        <div class="row mb-3">
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4>${Math.round(monthlyDemand)}</h4>
+                    <small>Monthly Demand</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4>${Math.round(weeklyDemand)}</h4>
+                    <small>Weekly Demand</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4>${Math.round(demand / 30)}</h4>
+                    <small>Daily Avg</small>
+                </div>
+            </div>
+        </div>
+        <div class="demand-indicator">
+            <div class="demand-fill" style="width: ${Math.min(100, (demand / 1000) * 100)}%"></div>
+        </div>
+    `;
+    
+    // Create combined chart with historical and forecast
+    if (demandChart) demandChart.destroy();
+    const ctx = document.getElementById('demandChart').getContext('2d');
+    
+    // Combine historical and forecast data
+    const historicalDates = product.historical?.dates?.slice(-30) || [];
+    const historicalDemand = product.historical?.demand?.slice(-30) || [];
+    const forecastDates = forecastData.map(f => f.date.substring(5));
+    const forecastDemand = forecastData.map(f => f.demand);
+    
+    const allDates = [...historicalDates.map(d => d.substring(5)), ...forecastDates];
+    const historicalData = [...historicalDemand, ...Array(forecastDates.length).fill(null)];
+    const forecastDataPoints = [...Array(historicalDemand.length).fill(null), ...forecastDemand];
+    
+    demandChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
+                {
+                    label: 'Historical Demand',
+                    data: historicalData,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 2,
+                    pointHoverRadius: 5
+                },
+                {
+                    label: 'Forecasted Demand',
+                    data: forecastDataPoints,
+                    borderColor: 'rgb(255, 159, 64)',
+                    backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 2,
+                    pointHoverRadius: 5
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${Math.round(context.raw)} units`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date',
+                        font: { weight: 'bold' }
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Demand (units)',
+                        font: { weight: 'bold' }
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+// Update Sales Forecast with Historical + Forecast
+function updateSalesForecast(product, prediction, forecastData) {
+    const container = document.getElementById('salesForecast');
+    const sales = prediction.sales || 0;
+    
+    container.innerHTML = `
+        <div class="row mb-3">
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4>$${Math.round(sales).toLocaleString()}</h4>
+                    <small>Monthly Revenue</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4>$${Math.round(sales/4).toLocaleString()}</h4>
+                    <small>Weekly Revenue</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4>$${Math.round(sales/30).toLocaleString()}</h4>
+                    <small>Daily Avg</small>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    if (salesChart) salesChart.destroy();
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    
+    const historicalDates = product.historical?.dates?.slice(-30) || [];
+    const historicalSales = product.historical?.sales?.slice(-30) || [];
+    const forecastDates = forecastData.map(f => f.date.substring(5));
+    const forecastSales = forecastData.map(f => f.sales);
+    
+    const allDates = [...historicalDates.map(d => d.substring(5)), ...forecastDates];
+    const historicalData = [...historicalSales, ...Array(forecastDates.length).fill(null)];
+    const forecastDataPoints = [...Array(historicalSales.length).fill(null), ...forecastSales];
+    
+    salesChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
+                {
+                    label: 'Historical Sales',
+                    data: historicalData,
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 2
+                },
+                {
+                    label: 'Forecasted Sales',
+                    data: forecastDataPoints,
+                    borderColor: 'rgb(255, 159, 64)',
+                    backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: $${Math.round(context.raw).toLocaleString()}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Date', font: { weight: 'bold' } } },
+                y: { title: { display: true, text: 'Sales ($)', font: { weight: 'bold' } }, beginAtZero: true }
+            }
+        }
+    });
+}
+
+// Update Profit Forecast with Historical + Forecast
+function updateProfitForecast(product, prediction, optimization, forecastData) {
+    const container = document.getElementById('profitForecast');
+    const profit = prediction.profit || 0;
+    const baseProfit = optimization?.base_profit || profit;
+    const optimalProfit = optimization?.optimal_profit || profit;
+    const improvement = ((optimalProfit - baseProfit) / baseProfit * 100) || 0;
+    
+    container.innerHTML = `
+        <div class="row mb-3">
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4>$${Math.round(baseProfit).toLocaleString()}</h4>
+                    <small>Current Profit</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4 class="${improvement > 0 ? 'trend-up' : 'trend-down'}">
+                        $${Math.round(optimalProfit).toLocaleString()}
+                    </h4>
+                    <small>Optimal Profit</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-badge text-center">
+                    <h4 class="${improvement > 0 ? 'trend-up' : 'trend-down'}">
+                        ${improvement > 0 ? '+' : ''}${improvement.toFixed(1)}%
+                    </h4>
+                    <small>Improvement</small>
+                </div>
+            </div>
+        </div>
+        <div class="text-center">
+            <strong>Optimal Discount: ${optimization?.optimal_discount || 0}%</strong>
+        </div>
+    `;
+    
+    if (profitChart) profitChart.destroy();
+    const ctx = document.getElementById('profitChart').getContext('2d');
+    
+    const historicalDates = product.historical?.dates?.slice(-30) || [];
+    const historicalProfit = product.historical?.profit?.slice(-30) || [];
+    const forecastDates = forecastData.map(f => f.date.substring(5));
+    const forecastProfit = forecastData.map(f => f.profit);
+    
+    const allDates = [...historicalDates.map(d => d.substring(5)), ...forecastDates];
+    const historicalData = [...historicalProfit, ...Array(forecastDates.length).fill(null)];
+    const forecastDataPoints = [...Array(historicalProfit.length).fill(null), ...forecastProfit];
+    
+    profitChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
+                {
+                    label: 'Historical Profit',
+                    data: historicalData,
+                    borderColor: 'rgb(76, 175, 80)',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 2
+                },
+                {
+                    label: 'Forecasted Profit',
+                    data: forecastDataPoints,
+                    borderColor: 'rgb(255, 152, 0)',
+                    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: $${Math.round(context.raw).toLocaleString()}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Date', font: { weight: 'bold' } } },
+                y: { title: { display: true, text: 'Profit ($)', font: { weight: 'bold' } }, beginAtZero: true }
+            }
+        }
+    });
+    
+    // Show profit optimization chart
+    if (optimization && optimization.scenarios && optimization.scenarios.length > 0) {
+        document.getElementById('profitOptimization').style.display = 'block';
+        if (profitOptChart) profitOptChart.destroy();
+        const optCtx = document.getElementById('profitOptimizationChart').getContext('2d');
+        
+        profitOptChart = new Chart(optCtx, {
+            type: 'bar',
+            data: {
+                labels: optimization.scenarios.map(s => `${s.discount_pct}% Discount`),
+                datasets: [{
+                    label: 'Profit ($)',
+                    data: optimization.scenarios.map(s => s.predicted_profit),
+                    backgroundColor: 'rgba(255, 159, 64, 0.5)',
+                    borderColor: 'rgb(255, 159, 64)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Profit ($)' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function updateInventoryManagement(product, optimization) {
+    const container = document.getElementById('inventoryManagement');
+    const currentStock = product.stock_available;
+    const reorderPoint = optimization?.reorder_point || 0;
+    const optimalOrder = optimization?.optimal_order_quantity || 0;
+    const status = currentStock <= reorderPoint ? 'CRITICAL' : 
+                   currentStock <= reorderPoint * 1.5 ? 'LOW' : 'OPTIMAL';
+    
+    const statusClass = status === 'CRITICAL' ? 'status-critical' : 
+                        status === 'LOW' ? 'status-low' : 'status-optimal';
+    
+    container.innerHTML = `
+        <div class="text-center mb-3">
+            <span class="inventory-status ${statusClass}">${status}</span>
+            <h3 class="mt-2">${currentStock} units</h3>
+            <small>Current Stock Level</small>
+        </div>
+        <div class="demand-indicator">
+            <div class="demand-fill" style="width: ${Math.min(100, (currentStock / reorderPoint) * 100)}%; background: ${currentStock <= reorderPoint ? '#ff4444' : '#4caf50'}"></div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-6"><small>Reorder Point:</small> <strong>${Math.round(reorderPoint)} units</strong></div>
+            <div class="col-6"><small>Recommended Order:</small> <strong>${Math.round(optimalOrder)} units</strong></div>
+        </div>
+    `;
+    
+    if (inventoryChart) inventoryChart.destroy();
+    const ctx = document.getElementById('inventoryChart').getContext('2d');
+    
+    inventoryChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Current Stock', 'Reorder Point', 'Optimal Order'],
+            datasets: [{
+                label: 'Quantity',
+                data: [currentStock, reorderPoint, optimalOrder],
+                backgroundColor: ['rgba(76, 175, 80, 0.5)', 'rgba(255, 152, 0, 0.5)', 'rgba(33, 150, 243, 0.5)'],
+                borderColor: ['rgb(76, 175, 80)', 'rgb(255, 152, 0)', 'rgb(33, 150, 243)'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'Units' } } }
+        }
+    });
+}
+
+function updateStockOptimization(product, optimization) {
+    const container = document.getElementById('stockOptimization');
+    const predictedDemand = optimization?.predicted_demand || 0;
+    const currentStock = product.stock_available;
+    const reorderPoint = optimization?.reorder_point || 0;
+    const optimalOrder = optimization?.optimal_order_quantity || 0;
+    const shouldOrder = optimization?.should_order || false;
+    
+    const daysUntilStockout = predictedDemand > 0 ? currentStock / (predictedDemand / 30) : 999;
+    
+    container.innerHTML = `
+        <div class="alert ${shouldOrder ? 'alert-danger' : 'alert-success'}">
+            <strong>${shouldOrder ? '⚠️ URGENT: Reorder Required!' : '✓ Stock Level Optimal'}</strong>
+            <br>
+            ${shouldOrder ? 
+                `You need to order ${Math.round(optimalOrder)} units immediately to avoid stockout.` : 
+                `Current stock will last approximately ${Math.round(daysUntilStockout)} days.`}
+        </div>
+    `;
+    
+    document.getElementById('recommendationDetails').style.display = 'flex';
+    document.getElementById('reorderPoint').innerHTML = `${Math.round(reorderPoint)} units`;
+    document.getElementById('optimalOrder').innerHTML = `${Math.round(optimalOrder)} units`;
+    document.getElementById('safetyStock').innerHTML = `50 units`;
+    document.getElementById('daysUntilStockout').innerHTML = `${Math.round(daysUntilStockout)} days`;
+}
+
+function updateProductSummary(product, demand, sales, profit, inventory) {
+    const container = document.getElementById('productSummary');
+    const profitMargin = sales.sales > 0 ? ((profit.profit / sales.sales) * 100).toFixed(1) : 0;
+    
+    container.innerHTML = `
+        <div class="row">
+            <div class="col-md-3">
+                <div class="text-center">
+                    <h4>${product.name}</h4>
+                    <small>Product Name</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <h4>$${product.unit_price}</h4>
+                    <small>Unit Price</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <h4>${Math.round(demand.demand)} units</h4>
+                    <small>Monthly Demand</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <h4>${profitMargin}%</h4>
+                    <small>Profit Margin</small>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function showLoading() {
+    const elements = ['demandForecast', 'salesForecast', 'profitForecast', 'inventoryManagement', 'stockOptimization'];
+    elements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el.innerHTML.includes('Select a product')) {
+            el.innerHTML = '<div class="text-center"><div class="loading-spinner"></div><br>Loading...</div>';
+        }
+    });
+}
+
+function hideLoading() {
+    // Loading will be replaced by actual content
+}
+</script>
+{% endblock %}

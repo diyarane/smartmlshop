@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Employee Dashboard - Smart Shop Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-user-circle"></i> Employee Dashboard</h2>
+            <p>Welcome, {{ employee_name }}! Here's your performance summary.</p>
+        </div>
+    </div>
+    
+    <!-- Employee Info -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-id-badge fa-3x text-primary mb-3"></i>
+                    <h5>Employee ID</h5>
+                    <p class="h4">{{ employee_id or 'Not Assigned' }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-calendar-alt fa-3x text-success mb-3"></i>
+                    <h5>Today's Date</h5>
+                    <p class="h4">{{ now().strftime('%B %d, %Y') }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-line fa-3x text-info mb-3"></i>
+                    <h5>Performance Rating</h5>
+                    <p class="h4">
+                        {% if metrics %}
+                            {% set rating = (metrics.total_sales / 1000) %}
+                            {{ "%.1f"|format(rating) }}/10
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Performance Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Your Performance Metrics</h5>
+                </div>
+                <div class="card-body">
+                    {% if metrics %}
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="metric-card text-center">
+                                <h3>${{ "%.2f"|format(metrics.total_sales) }}</h3>
+                                <p class="text-muted">Total Sales</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-card text-center">
+                                <h3>{{ metrics.total_transactions }}</h3>
+                                <p class="text-muted">Transactions</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-card text-center">
+                                <h3>${{ "%.2f"|format(metrics.avg_transaction) }}</h3>
+                                <p class="text-muted">Avg Transaction Value</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-card text-center">
+                                <h3>${{ "%.2f"|format(metrics.total_profit) }}</h3>
+                                <p class="text-muted">Total Profit</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted">No performance data available yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <button class="btn btn-primary w-100" onclick="showPredictionModal()">
+                                <i class="fas fa-chart-line"></i> Predict Sales
+                            </button>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <button class="btn btn-success w-100" onclick="showInventoryModal()">
+                                <i class="fas fa-boxes"></i> Optimize Inventory
+                            </button>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <button class="btn btn-info w-100" onclick="showProfitModal()">
+                                <i class="fas fa-dollar-sign"></i> Optimize Profit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prediction Modal -->
+<div class="modal fade" id="predictionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Sales Prediction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="predictionForm">
+                    <div class="mb-3">
+                        <label class="form-label">Category (0-4)</label>
+                        <input type="number" class="form-control" id="category" value="0" step="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Unit Price ($)</label>
+                        <input type="number" class="form-control" id="unit_price" value="100">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Discount (%)</label>
+                        <input type="number" class="form-control" id="discount" value="0" step="5">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Promotion (0/1)</label>
+                        <input type="number" class="form-control" id="promotion" value="0" step="1">
+                    </div>
+                </form>
+                <div id="predictionResult" class="alert alert-info mt-3" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="makePrediction()">Predict</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showPredictionModal() {
+    const modal = new bootstrap.Modal(document.getElementById('predictionModal'));
+    modal.show();
+}
+
+function makePrediction() {
+    const data = {
+        category: parseInt(document.getElementById('category').value),
+        unit_price: parseFloat(document.getElementById('unit_price').value),
+        discount_pct: parseFloat(document.getElementById('discount').value),
+        promotion: parseInt(document.getElementById('promotion').value),
+        month: new Date().getMonth() + 1,
+        day: new Date().getDate(),
+        weekday: new Date().getDay(),
+        is_weekend: [0, 6].includes(new Date().getDay()) ? 1 : 0,
+        festival: 0,
+        lag_1_day_sales: 100,
+        lag_7_day_sales: 700,
+        rolling_7d_avg_sales: 100
+    };
+    
+    fetch('/api/predict', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        const resultDiv = document.getElementById('predictionResult');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+            <strong>Prediction Results:</strong><br>
+            Sales: $${data.sales.toFixed(2)}<br>
+            Demand: ${data.demand.toFixed(0)} units<br>
+            Profit: $${data.profit.toFixed(2)}
+        `;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Prediction failed. Please try again.');
+    });
+}
+
+function showInventoryModal() {
+    // Similar modal for inventory optimization
+    alert('Inventory optimization feature coming soon!');
+}
+
+function showProfitModal() {
+    // Similar modal for profit optimization
+    alert('Profit optimization feature coming soon!');
+}
+</script>
+{% endblock %}

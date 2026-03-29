@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Smart Shop Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center">
+        <div class="jumbotron bg-light p-5 rounded">
+            <h1 class="display-4">Smart Shop Management System</h1>
+            <p class="lead">AI-Powered Retail Management with Machine Learning</p>
+            <hr class="my-4">
+            <p>Optimize your store operations with predictive analytics, inventory optimization, and performance tracking.</p>
+            {% if not session.user %}
+                <a class="btn btn-primary btn-lg" href="{{ url_for('auth.login') }}" role="button">
+                    <i class="fas fa-sign-in-alt"></i> Login to Dashboard
+                </a>
+            {% else %}
+                <a class="btn btn-primary btn-lg" href="{{ url_for('auth.dashboard_redirect') }}" role="button">
+                    <i class="fas fa-chart-line"></i> Go to Dashboard
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-chart-line fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Sales Forecasting</h5>
+                <p class="card-text">Predict future sales with machine learning algorithms based on historical data and trends.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-boxes fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Inventory Optimization</h5>
+                <p class="card-text">Optimize stock levels and reduce carrying costs with demand prediction.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-dollar-sign fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Profit Optimization</h5>
+                <p class="card-text">Maximize profits by finding optimal pricing and discount strategies.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

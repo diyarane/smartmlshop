@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Manager Dashboard - Smart Shop Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-chart-line"></i> Manager Dashboard</h2>
+            <p>Welcome to the manager dashboard. Here you can monitor store performance and make data-driven decisions.</p>
+        </div>
+    </div>
+    
+    <!-- Metrics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Revenue</h5>
+                    <h2 class="card-text">${{ "%.2f"|format(metrics.total_revenue) }}</h2>
+                    <small>Today's revenue</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Profit</h5>
+                    <h2 class="card-text">${{ "%.2f"|format(metrics.total_profit) }}</h2>
+                    <small>Today's profit</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Transactions</h5>
+                    <h2 class="card-text">{{ metrics.total_transactions }}</h2>
+                    <small>Today's transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Avg Order Value</h5>
+                    <h2 class="card-text">${{ "%.2f"|format(metrics.avg_order_value) }}</h2>
+                    <small>Today's average</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Daily Sales Trend (Last 30 Days)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="salesTrendChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Category Sales Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="categoryChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Top Products -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Top 10 Products by Revenue</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="topProductsChart" width="800" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Sales Trend Chart
+const salesTrendCtx = document.getElementById('salesTrendChart').getContext('2d');
+const salesTrendData = {{ daily_sales|tojson }};
+const salesTrendChart = new Chart(salesTrendCtx, {
+    type: 'line',
+    data: {
+        labels: Object.keys(salesTrendData),
+        datasets: [{
+            label: 'Daily Sales ($)',
+            data: Object.values(salesTrendData),
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+            }
+        }
+    }
+});
+
+// Category Chart
+const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+const categoryData = {{ category_sales|tojson }};
+const categoryChart = new Chart(categoryCtx, {
+    type: 'pie',
+    data: {
+        labels: Object.keys(categoryData),
+        datasets: [{
+            data: Object.values(categoryData),
+            backgroundColor: [
+                'rgb(255, 99, 132)',
+                'rgb(54, 162, 235)',
+                'rgb(255, 205, 86)',
+                'rgb(75, 192, 192)',
+                'rgb(153, 102, 255)'
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+            }
+        }
+    }
+});
+
+// Top Products Chart
+const topProductsCtx = document.getElementById('topProductsChart').getContext('2d');
+const topProductsData = {{ top_products|tojson }};
+const topProductsChart = new Chart(topProductsCtx, {
+    type: 'bar',
+    data: {
+        labels: Object.keys(topProductsData),
+        datasets: [{
+            label: 'Revenue ($)',
+            data: Object.values(topProductsData),
+            backgroundColor: 'rgb(54, 162, 235)'
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+</script>
+{% endblock %}
