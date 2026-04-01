@@ -89,19 +89,23 @@ def get_dashboard_data():
     df['date'] = pd.to_datetime(df['date'])
     latest_date = df['date'].max()
     today_data = df[df['date'] == latest_date]
+
+    # Raw CSV uses product_name; generated sample data uses product
+    product_col = 'product_name' if 'product_name' in df.columns else 'product'
+    revenue_col = 'revenue' if 'revenue' in df.columns else 'sales'
     
     metrics = {
-        'total_revenue': today_data['revenue'].sum() if not today_data.empty else 0,
+        'total_revenue': today_data[revenue_col].sum() if not today_data.empty else 0,
         'total_profit': today_data['profit'].sum() if not today_data.empty else 0,
         'total_transactions': len(today_data),
-        'avg_order_value': today_data['revenue'].mean() if not today_data.empty else 0
+        'avg_order_value': today_data[revenue_col].mean() if not today_data.empty else 0
     }
     
-    product_sales = df.groupby('product')['revenue'].sum().sort_values(ascending=False).head(10)
-    category_sales = df.groupby('category')['revenue'].sum()
+    product_sales = df.groupby(product_col)[revenue_col].sum().sort_values(ascending=False).head(10)
+    category_sales = df.groupby('category')[revenue_col].sum()
     
     last_30_days = df[df['date'] >= (latest_date - timedelta(days=30))]
-    daily_sales = last_30_days.groupby(last_30_days['date'].dt.date)['revenue'].sum()
+    daily_sales = last_30_days.groupby(last_30_days['date'].dt.date)[revenue_col].sum()
     daily_sales.index = daily_sales.index.astype(str)
     
     return {
