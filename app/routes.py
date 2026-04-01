@@ -361,11 +361,14 @@ def optimize_inventory_api():
         current_stock = int(invb['current_stock'])
         recommended = float(invb['recommended_order'])
         daily_demand = float(invb['daily_demand'])
+        should_order = bool(current_stock <= reorder_point)
+        if should_order:
+            recommended = max(recommended - current_stock, 50.0)
         return jsonify({
             'reorder_point': max(10.0, round(reorder_point, 2)),
             'optimal_order_quantity': max(0.0, round(recommended, 2)),
             'predicted_demand': predicted_demand,
-            'should_order': bool(current_stock <= reorder_point),
+            'should_order': should_order,
             'daily_demand': daily_demand,
         })
     except Exception as e:
