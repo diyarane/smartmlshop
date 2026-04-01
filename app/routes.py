@@ -358,12 +358,23 @@ def optimize_inventory_api():
         fc_d = b['demand']['forecast']
         predicted_demand = float(sum(fc_d))
         reorder_point = float(invb['reorder_point'])
-        current_stock = int(invb['current_stock'])
-        recommended = float(invb['recommended_order'])
         daily_demand = float(invb['daily_demand'])
+        if data.get('stock_available') is not None:
+            try:
+                current_stock = int(float(data['stock_available']))
+            except (TypeError, ValueError):
+                current_stock = int(invb['current_stock'])
+        else:
+            current_stock = int(invb['current_stock'])
+        recommended = float(invb['recommended_order'])
         should_order = bool(current_stock <= reorder_point)
         if should_order:
-            recommended = max(recommended - current_stock, 50.0)
+            lead_time = max(1.0, float(data.get('lead_time') or 7))
+            target_stock_level = reorder_point + (daily_demand * lead_time * 1.5)
+            recommended = max(
+                target_stock_level - current_stock,
+                daily_demand * lead_time,
+            )
         return jsonify({
             'reorder_point': max(10.0, round(reorder_point, 2)),
             'optimal_order_quantity': max(0.0, round(recommended, 2)),
