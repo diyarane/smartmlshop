@@ -370,32 +370,68 @@ async function getHistoricalData(product) {
     }
 }
 
+/**
+ * Historical series for manually entered products: same /api/get-historical-data route
+ * and the same resolver fields as predict-* (product_id null, name, category, unit_price)
+ * so charts share one scale with /api/predict-demand|sales|profit.
+ */
+async function getHistoricalDataCustomProduct(product) {
+    try {
+        const response = await fetch('/api/get-historical-data', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                product_id: null,
+                product_name: product.name,
+                name: product.name,
+                category: product.category,
+                unit_price: product.unit_price
+            })
+        });
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching historical data:', error);
+        return generateSampleHistoricalData();
+    }
+}
+
+/** Local calendar date as YYYY-MM-DD (noon anchor avoids UTC/DST skew). */
+function formatLocalYYYYMMDD(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1);
+    if (m.length === 1) m = '0' + m;
+    var day = String(d.getDate());
+    if (day.length === 1) day = '0' + day;
+    return y + '-' + m + '-' + day;
+}
+
 // Generate sample historical data for demo
 function generateSampleHistoricalData() {
     const dates = [];
     const demand = [];
     const sales = [];
     const profit = [];
-    
-    // Generate last 60 days of historical data
+
+    // 60 consecutive calendar days (local), oldest → newest; noon avoids UTC/DST skew from toISOString()
     for (let i = 60; i >= 1; i--) {
         const date = new Date();
+        date.setHours(12, 0, 0, 0);
         date.setDate(date.getDate() - i);
-        dates.push(date.toISOString().split('T')[0]);
-        
-        // Create some realistic patterns
+        dates.push(formatLocalYYYYMMDD(date));
+
         const dayOfWeek = date.getDay();
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const multiplier = isWeekend ? 1.5 : 1.0;
-        
+
         const baseDemand = 50 + Math.random() * 30;
         const baseSales = baseDemand * 100 * multiplier;
-        
+
         demand.push(baseDemand * multiplier);
         sales.push(baseSales);
         profit.push(baseSales * 0.3);
     }
-    
+
     return { dates, demand, sales, profit };
 }
 
@@ -408,25 +444,27 @@ async function analyzeCustomProduct() {
     }
 
     const customName = (document.getElementById('customProduct').value || '').trim();
+    const unitPrice = parseFloat(document.getElementById('customPrice').value) || 100;
     const productData = {
-        id: 'custom',
+        id: null,
         product_id: null,
         name: customName || 'Custom Product',
         category: parseInt(document.getElementById('customCategory').value, 10),
-        unit_price: parseFloat(document.getElementById('customPrice').value) || 100,
+        unit_price: unitPrice,
         stock_available: parseInt(document.getElementById('customStock').value, 10) || 100,
         lead_time: 7,
         safety_stock: 50,
         order_cost: 50,
-        holding_cost: (parseFloat(document.getElementById('customPrice').value) || 100) * 0.2
+        holding_cost: unitPrice * 0.2
     };
 
     if (!customName) {
         alert('Please select a product from the dropdown or enter a product name for custom analysis.');
         return;
     }
-    
-    productData.historical = normalizeHistoricalToArray(generateSampleHistoricalData());
+
+    const raw = await getHistoricalDataCustomProduct(productData);
+    productData.historical = normalizeHistoricalToArray(raw);
 
     await analyzeProduct(productData);
 }
