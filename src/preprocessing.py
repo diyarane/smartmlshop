@@ -361,11 +361,37 @@ class DataPreprocessor:
         daily['lag_1'] = daily['demand'].shift(1)
         daily['lag_7'] = daily['demand'].shift(7)
         daily['rolling_mean_7'] = daily['demand'].rolling(window=7).mean()
+        daily['7_day_rolling_demand'] = daily['rolling_mean_7']
+        daily['30_day_rolling_demand'] = daily['demand'].rolling(window=30, min_periods=7).mean()
+        daily['30_day_rolling_demand'] = daily['30_day_rolling_demand'].fillna(daily['7_day_rolling_demand'])
+
+        def _demand_slope7(arr):
+            a = np.asarray(arr, dtype=float)
+            if np.any(np.isnan(a)):
+                return 0.0
+            if a.size < 2:
+                return 0.0
+            t = np.arange(a.size, dtype=float)
+            return float(np.polyfit(t, a, 1)[0])
+
+        daily['demand_trend'] = daily['demand'].rolling(7, min_periods=4).apply(
+            _demand_slope7, raw=True
+        )
+        daily['demand_trend'] = daily['demand_trend'].fillna(0.0)
+
         daily['day_of_week'] = daily['date'].dt.weekday
         daily['month'] = daily['date'].dt.month
         daily['is_festival'] = daily['is_festival'].fillna(0).astype(float)
 
-        daily = daily.dropna(subset=['lag_1', 'lag_7', 'rolling_mean_7']).reset_index(drop=True)
+        req = [
+            'lag_1',
+            'lag_7',
+            'rolling_mean_7',
+            '7_day_rolling_demand',
+            '30_day_rolling_demand',
+            'demand_trend',
+        ]
+        daily = daily.dropna(subset=req).reset_index(drop=True)
         if len(daily) < 30:
             return (None, None, None) if return_dates else (None, None)
 
@@ -430,7 +456,17 @@ class DataPreprocessor:
 
         lag_1 = float(qseries[-1])
         lag_7 = float(qseries[-7]) if len(qseries) >= 7 else lag_1
-        rolling_mean_7 = float(sum(qseries[-7:]) / min(7, len(qseries)))
+        tail7 = [float(x) for x in qseries[-7:]]
+        rolling_mean_7 = float(sum(tail7) / len(tail7))
+        seven_day = rolling_mean_7
+        win30 = min(30, len(qseries))
+        thirty_day = float(sum(qseries[-win30:]) / win30)
+        arr7 = np.asarray(tail7, dtype=float)
+        if arr7.size >= 2:
+            t = np.arange(arr7.size, dtype=float)
+            demand_trend = float(np.polyfit(t, arr7, 1)[0])
+        else:
+            demand_trend = 0.0
 
         now = datetime.now()
         fest = float(input_data.get('festival', input_data.get('is_festival', 0)) or 0)
@@ -439,6 +475,9 @@ class DataPreprocessor:
             'lag_1': lag_1,
             'lag_7': lag_7,
             'rolling_mean_7': rolling_mean_7,
+            '7_day_rolling_demand': seven_day,
+            '30_day_rolling_demand': thirty_day,
+            'demand_trend': demand_trend,
             'day_of_week': float(now.weekday()),
             'month': float(now.month),
             'is_festival': fest,

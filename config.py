@@ -21,6 +21,9 @@ class Config:
     SALES_FEATURE_NAMES_PATH = MODELS_DIR / 'sales_feature_names.pkl'
     PROFIT_FEATURE_NAMES_PATH = MODELS_DIR / 'profit_feature_names.pkl'
     FORECAST_TRAIN_META_PATH = MODELS_DIR / 'forecast_train_meta.pkl'
+    SALES_MODEL_RF_FALLBACK_PATH = MODELS_DIR / 'sales_model_rf_fallback.pkl'
+    DEMAND_MODEL_RF_FALLBACK_PATH = MODELS_DIR / 'demand_model_rf_fallback.pkl'
+    PROFIT_MODEL_RF_FALLBACK_PATH = MODELS_DIR / 'profit_model_rf_fallback.pkl'
     
     # ML parameters
     RANDOM_STATE = 42
@@ -45,6 +48,7 @@ class Config:
     # Features used only by the demand model (daily store-level series + calendar)
     DEMAND_FEATURES = [
         'lag_1', 'lag_7', 'rolling_mean_7',
+        '7_day_rolling_demand', '30_day_rolling_demand', 'demand_trend',
         'day_of_week', 'month', 'is_festival',
     ]
     

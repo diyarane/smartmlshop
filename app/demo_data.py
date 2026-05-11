@@ -121,15 +121,8 @@ def create_demo_data():
                 for _ in range(num_sales):
                     product = random.choice(products)
                     quantity = random.randint(1, 3)
-                    
-                    is_weekend = sale_date.weekday() >= 5
-                    multiplier = 1.5 if is_weekend else 1.0
-                    
-                    has_promotion = random.random() < 0.3
-                    price_multiplier = 0.9 if has_promotion else 1.0
-                    
-                    unit_price = product.price * price_multiplier
-                    total = unit_price * quantity * multiplier
+                    unit_price = float(product.price)
+                    total = unit_price * quantity
                     profit = total * 0.35
                     
                     sale = Sale(
@@ -141,6 +134,38 @@ def create_demo_data():
                         date=sale_date
                     )
                     sales_data.append(sale)
+
+        # Force today's sales so dashboards filtered to "Today" never show zeros.
+        today = datetime.now()
+        for employee in employees:
+            # Match the same performance-based sales volume used in the 90-day history.
+            if employee.name == 'Alice Johnson':
+                num_sales = random.randint(8, 20)
+            elif employee.name == 'Carol Davis':
+                num_sales = random.randint(7, 18)
+            elif employee.name == 'Bob Smith':
+                num_sales = random.randint(5, 15)
+            elif employee.name == 'Emma Brown':
+                num_sales = random.randint(4, 12)
+            else:
+                num_sales = random.randint(3, 10)
+
+            for _ in range(num_sales):
+                product = random.choice(products)
+                quantity = random.randint(1, 3)
+                unit_price = float(product.price)
+                total = unit_price * quantity
+                profit = total * 0.35
+
+                sale = Sale(
+                    employee_id=employee.id,
+                    product_id=product.id,
+                    quantity=quantity,
+                    total_amount=total,
+                    profit=profit,
+                    date=today
+                )
+                sales_data.append(sale)
         
         # Add sales in batches to avoid memory issues
         batch_size = 1000

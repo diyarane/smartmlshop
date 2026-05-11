@@ -1,3 +1,11 @@
+"""
+Runtime prediction loads sklearn-compatible regressors from joblib (.pkl).
+
+Training (`src.train_model`) compares several regressors; production defaults to
+tuned GradientBoostingRegressor (`*_model.pkl`). Optional `*_model_rf_fallback.pkl`
+uses RandomForest when the primary model fails to load or predict. Sales/profit
+may apply `log1p` at train time; inference uses `forecast_train_meta.pkl` flags.
+"""
 import sys
 import pandas as pd
 import numpy as np
@@ -20,6 +28,17 @@ from src.preprocessing import DataPreprocessor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _regressor_predict(model, features):
+    """Predict one row from any sklearn-style regressor (RF, XGBoost, GBR, LR, Pipeline+SVR)."""
+    out = model.predict(features)
+    arr = np.asarray(out, dtype=float).ravel()
+    return arr
+
+
+def _expm1_safe(x: float) -> float:
+    return float(np.expm1(np.clip(float(x), -48.0, 48.0)))
 
 
 def refine_demand_daily(value):
@@ -72,6 +91,13 @@ class Predictor:
             if os.path.exists(Config.PROFIT_MODEL_PATH):
                 self.models['profit'] = joblib.load(Config.PROFIT_MODEL_PATH)
 
+            if getattr(Config, "DEMAND_MODEL_RF_FALLBACK_PATH", None) and Config.DEMAND_MODEL_RF_FALLBACK_PATH.exists():
+                self.models["demand_rf_fallback"] = joblib.load(Config.DEMAND_MODEL_RF_FALLBACK_PATH)
+            if getattr(Config, "SALES_MODEL_RF_FALLBACK_PATH", None) and Config.SALES_MODEL_RF_FALLBACK_PATH.exists():
+                self.models["sales_rf_fallback"] = joblib.load(Config.SALES_MODEL_RF_FALLBACK_PATH)
+            if getattr(Config, "PROFIT_MODEL_RF_FALLBACK_PATH", None) and Config.PROFIT_MODEL_RF_FALLBACK_PATH.exists():
+                self.models["profit_rf_fallback"] = joblib.load(Config.PROFIT_MODEL_RF_FALLBACK_PATH)
+
             feature_names_path = os.path.join(str(Config.MODELS_DIR), 'feature_names.pkl')
             if os.path.exists(feature_names_path):
                 self.feature_names = joblib.load(feature_names_path)
@@ -104,7 +130,17 @@ class Predictor:
             logger.error(f"Error loading models: {e}")
             logger.info("Models will be retrained on next run")
             return False
-    
+
+    def _predict_primary_or_rf(self, primary_key: str, features):
+        try:
+            return float(_regressor_predict(self.models[primary_key], features)[0])
+        except Exception as e:
+            fb = self.models.get(f"{primary_key}_rf_fallback")
+            if fb is None:
+                raise
+            logger.warning("Primary %s failed (%s); using RandomForest fallback", primary_key, e)
+            return float(_regressor_predict(fb, features)[0])
+
     def predict_sales(self, input_data):
         """Predict sales (revenue); uses [unit_price, category, demand_pred, trend] — not demand×price only."""
         if not self.models.get('sales'):
@@ -118,15 +154,13 @@ class Predictor:
                 features = self._prepare_features(input_data)
             if features is None:
                 return None
-            prediction = self.models['sales'].predict(features)
-            out = float(prediction[0]) if len(prediction) else None
-            if out is None:
-                return None
+            raw = self._predict_primary_or_rf("sales", features)
+            if self.forecast_meta and self.forecast_meta.get("sales_log1p"):
+                raw = _expm1_safe(raw)
             scale = 1.0
-            if self.forecast_meta and self.forecast_meta.get('sales_scale'):
-                scale = float(self.forecast_meta['sales_scale'])
-            out = max(0.0, out * scale)
-            return out
+            if self.forecast_meta and self.forecast_meta.get("sales_scale"):
+                scale = float(self.forecast_meta["sales_scale"])
+            return max(0.0, float(raw) * scale)
         except Exception as e:
             logger.error(f"Sales prediction error: {e}")
             return None
@@ -149,10 +183,14 @@ class Predictor:
                 if c not in row.columns:
                     row[c] = 0.0
             features = row[cols].astype(float).replace([np.inf, -np.inf], 0).fillna(0)
-            prediction = self.models['demand'].predict(features)
-            raw = float(prediction[0]) if len(prediction) else None
-            if raw is None:
-                return None
+            try:
+                raw = float(_regressor_predict(self.models["demand"], features)[0])
+            except Exception as e:
+                fb = self.models.get("demand_rf_fallback")
+                if fb is None:
+                    raise
+                logger.warning("Demand primary failed (%s); using RF fallback", e)
+                raw = float(_regressor_predict(fb, features)[0])
             refined = refine_demand_daily(raw)
             return refined
         except Exception as e:
@@ -172,9 +210,10 @@ class Predictor:
                 features = self._prepare_features(input_data)
             if features is None:
                 return None
-            prediction = self.models['profit'].predict(features)
-            out = float(prediction[0]) if len(prediction) else None
-            return out
+            raw = self._predict_primary_or_rf("profit", features)
+            if self.forecast_meta and self.forecast_meta.get("profit_log1p"):
+                return _expm1_safe(raw)
+            return float(raw)
         except Exception as e:
             logger.error(f"Profit prediction error: {e}")
             return None
