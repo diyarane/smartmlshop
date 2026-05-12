@@ -296,7 +296,8 @@ def train_and_compare_target(
     Production: tuned GradientBoostingRegressor. Also compares RF, XGBoost, LightGBM, LR, SVR.
     """
     rows_summary: list[str] = []
-    candidates: list[tuple[str, float]] = []
+    model_scores: dict[str, float] = {}
+    model_objects: dict[str, object] = {}
     line_no = 1
 
     gbr_default = GradientBoostingRegressor(
@@ -310,7 +311,7 @@ def train_and_compare_target(
         n_iter_no_change=10,
         tol=1e-4,
     )
-    _, tr_m, te_m, _ = fit_eval_model(
+    fitted_gbr_default, tr_m, te_m, _ = fit_eval_model(
         "GRADIENT BOOSTING (Default)",
         gbr_default,
         X_train,
@@ -324,7 +325,8 @@ def train_and_compare_target(
         _summary_lines(line_no, "GRADIENT BOOSTING (Default)", tr_m, te_m, use_dollar)
     )
     line_no += 1
-    candidates.append(("GRADIENT BOOSTING (Default)", te_m["r2"]))
+    model_scores["GRADIENT BOOSTING (Default)"] = te_m["r2"]
+    model_objects["GRADIENT BOOSTING (Default)"] = fitted_gbr_default
 
     tuned_gbr, tr_g, te_g, _, gbr_bp, _ = run_gbr_grid_search(
         X_train, y_train, X_test, y_test, use_dollar, target_log=target_log
@@ -349,10 +351,11 @@ def train_and_compare_target(
         )
     )
     line_no += 1
-    candidates.append(("GRADIENT BOOSTING (Tuned)", te_g["r2"]))
+    model_scores["GRADIENT BOOSTING (Tuned)"] = te_g["r2"]
+    model_objects["GRADIENT BOOSTING (Tuned)"] = tuned_gbr
 
     rf_default = RandomForestRegressor(random_state=Config.RANDOM_STATE, n_jobs=-1)
-    _, tr_rf, te_rf, _ = fit_eval_model(
+    fitted_rf_default, tr_rf, te_rf, _ = fit_eval_model(
         "RANDOM FOREST (Default)",
         rf_default,
         X_train,
@@ -364,7 +367,8 @@ def train_and_compare_target(
     )
     rows_summary.append(_summary_lines(line_no, "RANDOM FOREST (Default)", tr_rf, te_rf, use_dollar))
     line_no += 1
-    candidates.append(("RANDOM FOREST (Default)", te_rf["r2"]))
+    model_scores["RANDOM FOREST (Default)"] = te_rf["r2"]
+    model_objects["RANDOM FOREST (Default)"] = fitted_rf_default
 
     tuned_rf, tr_t, te_t, _, best_params, _ = run_rf_grid_search(
         X_train, y_train, X_test, y_test, use_dollar, target_log=target_log
@@ -381,7 +385,8 @@ def train_and_compare_target(
         _summary_lines(line_no, "RANDOM FOREST (Tuned)", tr_t, te_t, use_dollar, extra=params_str)
     )
     line_no += 1
-    candidates.append(("RANDOM FOREST (Tuned)", te_t["r2"]))
+    model_scores["RANDOM FOREST (Tuned)"] = te_t["r2"]
+    model_objects["RANDOM FOREST (Tuned)"] = tuned_rf
 
     if HAS_XGBOOST:
         xgb = XGBRegressor(
@@ -394,7 +399,7 @@ def train_and_compare_target(
             n_jobs=-1,
             verbosity=0,
         )
-        _, tr_x, te_x, _ = fit_eval_model(
+        fitted_xgb, tr_x, te_x, _ = fit_eval_model(
             "XGBOOST",
             xgb,
             X_train,
@@ -406,7 +411,8 @@ def train_and_compare_target(
         )
         rows_summary.append(_summary_lines(line_no, "XGBOOST", tr_x, te_x, use_dollar))
         line_no += 1
-        candidates.append(("XGBOOST", te_x["r2"]))
+        model_scores["XGBOOST"] = te_x["r2"]
+        model_objects["XGBOOST"] = fitted_xgb
     else:
         print(
             "\n=== XGBOOST ===\n"
@@ -434,7 +440,7 @@ def train_and_compare_target(
             n_jobs=-1,
             verbose=-1,
         )
-        _, tr_lgb, te_lgb, _ = fit_eval_model(
+        fitted_lgbm, tr_lgb, te_lgb, _ = fit_eval_model(
             "LIGHTGBM",
             lgbm,
             X_train,
@@ -446,7 +452,8 @@ def train_and_compare_target(
         )
         rows_summary.append(_summary_lines(line_no, "LIGHTGBM", tr_lgb, te_lgb, use_dollar))
         line_no += 1
-        candidates.append(("LIGHTGBM", te_lgb["r2"]))
+        model_scores["LIGHTGBM"] = te_lgb["r2"]
+        model_objects["LIGHTGBM"] = fitted_lgbm
     else:
         print(
             "\n=== LIGHTGBM ===\n"
@@ -462,7 +469,7 @@ def train_and_compare_target(
         line_no += 1
 
     lr = LinearRegression()
-    _, tr_l, te_l, _ = fit_eval_model(
+    fitted_lr, tr_l, te_l, _ = fit_eval_model(
         "LINEAR REGRESSION",
         lr,
         X_train,
@@ -474,7 +481,8 @@ def train_and_compare_target(
     )
     rows_summary.append(_summary_lines(line_no, "LINEAR REGRESSION", tr_l, te_l, use_dollar))
     line_no += 1
-    candidates.append(("LINEAR REGRESSION", te_l["r2"]))
+    model_scores["LINEAR REGRESSION"] = te_l["r2"]
+    model_objects["LINEAR REGRESSION"] = fitted_lr
 
     svr_pipe = Pipeline(
         [
@@ -482,7 +490,7 @@ def train_and_compare_target(
             ("svr", SVR(kernel="rbf", C=1.0, epsilon=0.1)),
         ]
     )
-    _, tr_s, te_s, _ = fit_eval_model(
+    fitted_svr, tr_s, te_s, _ = fit_eval_model(
         "SVR",
         svr_pipe,
         X_train,
@@ -494,9 +502,12 @@ def train_and_compare_target(
     )
     rows_summary.append(_summary_lines(line_no, "SVR", tr_s, te_s, use_dollar))
     line_no += 1
-    candidates.append(("SVR", te_s["r2"]))
+    model_scores["SVR"] = te_s["r2"]
+    model_objects["SVR"] = fitted_svr
 
-    best_name, best_r2 = max(candidates, key=lambda x: x[1])
+    best_name, best_r2 = max(model_scores.items(), key=lambda x: x[1])
+    best_model = model_objects[best_name]
+    logger.info(f"Best model for {target_title}: {best_name} (R²={best_r2:.4f})")
     print_comparison_table(
         f"MULTIPLE MODEL COMPARISON — {target_title}",
         rows_summary,
@@ -504,7 +515,7 @@ def train_and_compare_target(
         best_r2,
     )
 
-    return tuned_gbr, best_name, best_r2, tuned_rf
+    return best_model, best_name, best_r2, tuned_rf
 
 
 class ModelTrainer:
